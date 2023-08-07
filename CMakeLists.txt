@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16.3)
 set(CMAKE_CXX_STANDARD 20)
 
-project(work_contract)
+project(system)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -34,6 +34,7 @@ fetch_dependency("https://github.com/ericniebler/range-v3.git;master")
 
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${PROJECT_NAME})
+set(_${PROJECT_NAME}_dir ${CMAKE_CURRENT_SOURCE_DIR} CACHE STRING "")
 
 add_subdirectory(src)
 

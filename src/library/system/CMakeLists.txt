@@ -4,11 +4,10 @@ add_library(system
     ./system.cpp
     )
 
-target_link_libraries(system 
-    include
-    )
+target_link_libraries(system include)
+
 
 target_include_directories(system
     PUBLIC
-        ${CMAKE_SOURCE_DIR}/src
+        ${_system_dir}/src
     )
