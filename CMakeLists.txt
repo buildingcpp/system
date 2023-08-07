@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16.3)
 set(CMAKE_CXX_STANDARD 20)
 
-project(system)
+project(work_contract)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -23,9 +23,14 @@ else()
 endif()
 
 
+option(WORKCONTRACT_BUILD_DEMO "Build the CLI demo" ON)
+
 include("./scripts/fetch_dependencies.cmake")
 
 fetch_dependency("https://github.com/buildingcpp/include.git;main")
+
+fetch_dependency("https://github.com/fmtlib/fmt.git;5f774c0aed4af6494b412cd3883e0f09295bd79d")
+fetch_dependency("https://github.com/ericniebler/range-v3.git;master")
 
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${PROJECT_NAME})

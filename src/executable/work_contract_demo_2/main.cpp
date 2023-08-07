@@ -9,8 +9,14 @@
 #include <vector>
 #include <thread>
 #include <queue>
+#include <string>
 
 #include <library/system.h>
+#include <fmt/format.h>
+
+
+using work_contract_group_type = bcpp::system::waitable_work_contract_group;
+using work_contract_type = bcpp::system::work_contract<work_contract_group_type::mode>;
 
 
 //=============================================================================
@@ -18,18 +24,18 @@ void example
 (
 )
 {
-    static auto constexpr num_messages = 1024;
+    static auto constexpr num_messages = 128;
 
     // create work contract group
     static auto constexpr max_number_of_contracts = 32;
-    bcpp::system::work_contract_group workContractGroup(max_number_of_contracts);
-    bcpp::system::work_contract workContract;
+    work_contract_group_type workContractGroup(max_number_of_contracts);
+    work_contract_type workContract;
 
     // create worker threads to service work contracts asynchronously
     auto max_number_of_worker_threads = std::thread::hardware_concurrency() / 2;
     std::vector<bcpp::system::thread_pool::thread_configuration> threadConfigurations(max_number_of_worker_threads);
     for (auto & threadConfiguration : threadConfigurations)
-        threadConfiguration.function_ = [&](auto const & stopToken){while (!stopToken.stop_requested()) workContractGroup.service_contracts();};
+        threadConfiguration.function_ = [&](auto const & stopToken){while (!stopToken.stop_requested()) workContractGroup.execute_next_contract();};
     bcpp::system::thread_pool threadPool({.threads_ = threadConfigurations});
 
     // crude message stream ...
@@ -53,7 +59,10 @@ void example
                         workContract.invoke();
                 }
                 if (message.empty())
+                {
+                    std::cout << "got termination message\n";
                     done = true;
+                }
                 else
                     std::cout << "Got message: " << message << "\n";
             };
@@ -71,8 +80,8 @@ void example
     // produce a series of messages and place them into the queue
     for (auto i = 0; i < num_messages; ++i)
     {
-        std::string message = "this is message #" + std::to_string(i);
-        sendMessage(message);
+        sendMessage(fmt::format("this is message #{}", i));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     
     // send an empty message which indicates end of test messages
@@ -80,7 +89,9 @@ void example
 
     // wait for all the messages to be received
     while (!done)
-        std::this_thread::yield();
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    workContractGroup.stop();
+    threadPool.stop();
 }
 
 

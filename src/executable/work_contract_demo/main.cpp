@@ -12,6 +12,9 @@
 
 #include <library/system.h>
 
+using work_contract_group_type = bcpp::system::waitable_work_contract_group;
+using work_contract_type = bcpp::system::work_contract<work_contract_group_type::mode>;
+
 
 //=============================================================================
 void bare_minimum_example
@@ -21,11 +24,29 @@ void bare_minimum_example
     // however, a mimium example is useful for understading the basic concepts.
 )
 {
-    bcpp::system::work_contract_group workContractGroup(8);
+    work_contract_group_type workContractGroup(8);
     auto workContract = workContractGroup.create_contract([](){std::cout << "contract invoked\n";}, nullptr);
+    workContract.invoke();
+    workContractGroup.execute_next_contract();
+}
+
+
+//=============================================================================
+void work_contract_after_group_destroyed_test
+(
+    // test.  destroy the owning work contract group PRIOR to the SURRENDER
+    // of the work contract.  Note: INVOCATION of the work contract is UB once
+    // the owning work contract group has been destroyed.  However, all work contracts
+    // will invoke their surrender function when destroyed.  We want to insure that this
+    // surrender FAILS in the case where the work contract group has already been destroyed.
+)
+{
+    auto workContractGroup = std::make_unique<work_contract_group_type>(8);
+    auto workContract = workContractGroup->create_contract([](){std::cout << "contract invoked\n";}, nullptr);
 
     workContract.invoke();
-    workContractGroup.service_contracts();
+    workContractGroup->execute_next_contract();
+    workContractGroup.reset();
 }
 
 
@@ -42,20 +63,20 @@ void basic_example
 {
     // create work contract group
     static auto constexpr max_number_of_contracts = 32;
-    bcpp::system::work_contract_group workContractGroup(max_number_of_contracts);
+    work_contract_group_type workContractGroup(max_number_of_contracts);
 
     // create worker thread to service work contracts asynchronously
     std::jthread workerThread([&](auto const & stopToken)
             {
                 while (!stopToken.stop_requested()) 
-                    workContractGroup.service_contracts();
+                    workContractGroup.execute_next_contract(std::chrono::milliseconds(10));
             });
 
     std::atomic<std::size_t> invokeCounter{16};
     std::atomic<bool> surrendered{false};
 
     // create a work contract from the work contract group
-    bcpp::system::work_contract workContract = workContractGroup.create_contract(
+    auto workContract = workContractGroup.create_contract(
             [&](){std::cout << "invokeCounter = " << --invokeCounter << "\n";},         // this is the async function
             [&](){std::cout << "work contract surrendered\n"; surrendered = true;});    // this is the one-shot surrender function
                     
@@ -73,7 +94,7 @@ void basic_example
 
 
 //=============================================================================
-void multithreaded_example
+void measure_multithreaded_concurrent_contracts
 (
     // measure performance where max number of contracts is large and where
     // there are always some preconfigured number of contracts invoked.
@@ -82,7 +103,7 @@ void multithreaded_example
     static auto const num_worker_threads = std::thread::hardware_concurrency() / 2;
     static auto constexpr test_duration = std::chrono::milliseconds(1000);
     static auto constexpr max_contracts = (1 << 20);
-    static auto constexpr max_concurrent_contracts = 32;
+    static auto constexpr max_concurrent_contracts = 256;
     static std::vector<std::size_t> contractId;
 
     static auto once = [&]()
@@ -100,10 +121,10 @@ void multithreaded_example
             }();
 
     // enable each contract to invoke the next random contract upon its own completion.
-    bcpp::system::work_contract_group workContractGroup(max_contracts);
+    work_contract_group_type workContractGroup(max_contracts);
     std::atomic<std::size_t> totalTaskCount;
     thread_local std::size_t taskCount;
-    std::vector<bcpp::system::work_contract> workContracts(max_contracts);
+    std::vector<work_contract_type> workContracts(max_contracts);
     for (auto i = 0; i < max_contracts; ++i)
         workContracts[i] = workContractGroup.create_contract([&, index = i]() mutable{++taskCount; workContracts[index = contractId[index]].invoke();});
 
@@ -113,17 +134,16 @@ void multithreaded_example
 
     // create a worker thread pool and direct the threads to service the work contract group - also very simple
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(num_worker_threads);
-    auto index = 0;
-    for (auto & thread : threads)
+    for (auto && [index, thread] : ranges::v3::views::enumerate(threads))
     {
-        thread.cpuId_ = index++;
+        thread.cpuId_ = index;
         thread.function_ = [&]
                 (
                     auto const & stopToken
                 ) mutable
                 {
                     while (!stopToken.stop_requested()) 
-                        workContractGroup.service_contracts(); 
+                        workContractGroup.execute_next_contract(); 
                     totalTaskCount += taskCount;
                     taskCount = 0;
                 };
@@ -149,12 +169,40 @@ int main
     char const **
 )
 {    
+
+    {
+    // create a work_contract_group
+    static auto constexpr max_contracts = (1 << 20);
+    work_contract_group_type workContractGroup(max_contracts);
+
+    // create a work_contract
+    auto counter = 0;
+    auto workContract = workContractGroup.create_contract(
+            [&](){std::cout << "contract executed: " << ++counter << "\n";},
+            [](){std::cout << "contract surrendered\n";});
+
+        for (auto i = 0; i < 10; ++i)
+        {
+                // invoke the work_contract
+            workContract.invoke();
+
+            // execute invoked work_contracts
+            workContractGroup.execute_next_contract();
+        }
+       // surrender the work_contract
+       workContract.surrender();
+
+       // execute invoked work_contracts
+       workContractGroup.execute_next_contract();
+}
+
     bare_minimum_example();
     basic_example();
+    work_contract_after_group_destroyed_test();
 
     static auto constexpr num_loops = 10;
     for (auto i = 0; i < num_loops; ++i)
-        multithreaded_example();
+        measure_multithreaded_concurrent_contracts();
 
     return 0;
 }

@@ -2,15 +2,18 @@
 
 #include <atomic>
 #include <cstdint>
-#include <utility>
 
 
 namespace bcpp::system
 {
 
+    enum class work_contract_mode : std::uint32_t;
+    
+    template <work_contract_mode> 
     class work_contract_group;
 
 
+    template <work_contract_mode T>
     class work_contract
     {
     public:
@@ -30,74 +33,78 @@ namespace bcpp::system
 
         void invoke();
 
-        void surrender();
+        bool surrender();
 
         bool is_valid() const;
 
-        operator bool() const;
+        explicit operator bool() const;
 
         id_type get_id() const;
 
-        bool update
-        (
-            std::function<void()>
-        );
-
-        bool update
-        (
-            std::function<void()>,
-            std::function<void()>
-        );
-
     private:
 
-        friend class work_contract_group;
+        friend class work_contract_group<T>;
 
         work_contract
         (
-            work_contract_group *, 
+            work_contract_group<T> *, 
+            std::shared_ptr<typename work_contract_group<T>::surrender_token>,
             id_type
         );
 
-        work_contract_group *   owner_;
+        work_contract_group<T> *   owner_{};
 
-        id_type                 id_;
+        std::shared_ptr<typename work_contract_group<T>::surrender_token> surrenderToken_;
+
+        id_type                 id_{};
 
     }; // class work_contract
 
-} // namespace bcpp::system
 
+    using waitable_work_contract = work_contract<work_contract_mode::waitable>;
+    using non_waitable_work_contract = work_contract<work_contract_mode::waitable>;
+
+    using basic_work_contract = non_waitable_work_contract;
+
+} // namespace bcpp::system
 
 #include "./work_contract_group.h"
 
 
 //=============================================================================
-inline bcpp::system::work_contract::work_contract
+template <bcpp::system::work_contract_mode T>
+inline bcpp::system::work_contract<T>::work_contract
 (
-    work_contract_group * owner, 
+    work_contract_group<T> * owner,
+    std::shared_ptr<typename work_contract_group<T>::surrender_token> surrenderToken, 
     id_type id
 ):
     owner_(owner),
+    surrenderToken_(surrenderToken),
     id_(id)
 {
 }
 
 
 //=============================================================================
-inline bcpp::system::work_contract::work_contract
+template <bcpp::system::work_contract_mode T>
+inline bcpp::system::work_contract<T>::work_contract
 (
     work_contract && other
 ):
     owner_(other.owner_),
+    surrenderToken_(other.surrenderToken_),
     id_(other.id_)
 {
     other.owner_ = {};
     other.id_ = {};
+    other.surrenderToken_ = {};
 }
 
     
 //=============================================================================
-inline auto bcpp::system::work_contract::operator =
+template <bcpp::system::work_contract_mode T>
+inline auto bcpp::system::work_contract<T>::operator =
 (
     work_contract && other
 ) -> work_contract &
@@ -106,15 +113,18 @@ inline auto bcpp::system::work_contract::operator =
 
     owner_ = other.owner_;
     id_ = other.id_;
+    surrenderToken_ = other.surrenderToken_;
     
     other.owner_ = {};
     other.id_ = {};
+    other.surrenderToken_ = {};
     return *this;
 }
 
 
 //=============================================================================
-inline bcpp::system::work_contract::~work_contract
+template <bcpp::system::work_contract_mode T>
+inline bcpp::system::work_contract<T>::~work_contract
 (
 )
 {
@@ -123,7 +133,8 @@ inline bcpp::system::work_contract::~work_contract
 
 
 //=============================================================================
-inline auto bcpp::system::work_contract::get_id
+template <bcpp::system::work_contract_mode T>
+inline auto bcpp::system::work_contract<T>::get_id
 (
 ) const -> id_type
 {
@@ -132,7 +143,8 @@ inline auto bcpp::system::work_contract::get_id
 
 
 //=============================================================================
-inline void bcpp::system::work_contract::invoke
+template <bcpp::system::work_contract_mode T>
+inline void bcpp::system::work_contract<T>::invoke
 (
 )
 {
@@ -141,7 +153,8 @@ inline void bcpp::system::work_contract::invoke
 
 
 //=============================================================================
-inline void bcpp::system::work_contract::operator()
+template <bcpp::system::work_contract_mode T>
+inline void bcpp::system::work_contract<T>::operator()
 (
 )
 {
@@ -150,17 +163,19 @@ inline void bcpp::system::work_contract::operator()
 
 
 //=============================================================================
-inline void bcpp::system::work_contract::surrender
+template <bcpp::system::work_contract_mode T>
+inline bool bcpp::system::work_contract<T>::surrender
 (
 )
 {
-    if (owner_)
-        std::exchange(owner_, nullptr)->surrender(*this);
+    owner_ = {};
+    return (surrenderToken_) ? surrenderToken_->invoke(*this) : false;
 }
 
 
 //=============================================================================
-inline bool bcpp::system::work_contract::is_valid
+template <bcpp::system::work_contract_mode T>
+inline bool bcpp::system::work_contract<T>::is_valid
 (
 ) const
 {
@@ -169,7 +184,8 @@ inline bool bcpp::system::work_contract::is_valid
 
 
 //=============================================================================
-inline bcpp::system::work_contract::operator bool
+template <bcpp::system::work_contract_mode T>
+inline bcpp::system::work_contract<T>::operator bool
 (
 ) const
 {
