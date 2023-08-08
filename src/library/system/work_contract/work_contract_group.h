@@ -6,59 +6,53 @@
 #include <cstdint>
 #include <atomic>
 #include <mutex>
-#include <condition_variable>
+#include <functional>
 
 
 namespace bcpp::system 
 {
 
-    enum class work_contract_mode : std::uint32_t
-    {
-        non_waitable = 0,
-        waitable = 1
-    };
-
-
-    template <work_contract_mode> 
     class work_contract;
 
 
-    template <work_contract_mode T = work_contract_mode::waitable>
     class work_contract_group
     {
     public:
 
-        static auto constexpr mode = T;
-        static auto constexpr waitable = (mode == work_contract_mode::waitable);
-
-        using work_contract_type = work_contract<mode>;
-
         class surrender_token;
+
+        using alert_handler = std::function<void(work_contract_group const &)>;
+
+        struct event_handlers
+        {
+            alert_handler alertHandler_;
+        };
 
         work_contract_group
         (
             std::int64_t
         );
 
+        work_contract_group
+        (
+            std::int64_t,
+            event_handlers
+        );
+
         ~work_contract_group();
 
-        work_contract_type create_contract
+        work_contract create_contract
         (
             std::function<void()>
         );
 
-        work_contract_type create_contract
+        work_contract create_contract
         (
             std::function<void()>,
             std::function<void()>
         );
 
-        std::size_t execute_next_contract();
-
-        std::size_t execute_next_contract
-        (
-            std::chrono::nanoseconds
-        ) requires (waitable);
+        void execute_next_contract();
 
         std::size_t get_capacity() const;
 
@@ -68,7 +62,7 @@ namespace bcpp::system
 
     private:
 
-        friend class work_contract<T>;
+        friend class work_contract;
         friend class surrender_token;
 
         static auto constexpr left_addend = 0x0000000000000001ull;
@@ -89,18 +83,18 @@ namespace bcpp::system
 
         void invoke
         (
-            work_contract_type const &
+            work_contract const &
         );
 
         void surrender
         (
-            work_contract_type const &
+            work_contract const &
         );        
         
         template <std::size_t>
         void set_contract_flag
         (
-            work_contract_type const &
+            work_contract const &
         );
 
         enum class decrement_preference : std::uint32_t
@@ -148,37 +142,27 @@ namespace bcpp::system
         
         std::atomic<std::uint64_t>                      preferenceFlags_;
 
-        std::condition_variable mutable                 conditionVariable_;
+        alert_handler                                   alertHandler_;
 
-        bool                                            stopped_{false};
     }; // class work_contract_group
 
 
-    template <work_contract_mode T>
-    class work_contract_group<T>::surrender_token
+    class work_contract_group::surrender_token
     {
     public:
 
-        using work_contract_group_type = work_contract_group<T>;
-        using work_contract_type = typename work_contract_group_type::work_contract_type;
-
         surrender_token
         (
-            work_contract_group_type *
+            work_contract_group *
         );
         
         std::mutex mutex_;
-        work_contract_group_type * workContractGroup_{};
+        work_contract_group * workContractGroup_{};
 
-        bool invoke(work_contract_type const &);
+        bool invoke(work_contract const &);
 
         void orphan();
     };
-
-
-    using waitable_work_contract_group = work_contract_group<work_contract_mode::waitable>;
-    using non_waitable_work_contract_group = work_contract_group<work_contract_mode::waitable>;
-    using basic_work_contract_group = non_waitable_work_contract_group;
 
 } // namespace bcpp::system
 
@@ -187,15 +171,26 @@ namespace bcpp::system
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline bcpp::system::work_contract_group<T>::work_contract_group
+inline bcpp::system::work_contract_group::work_contract_group
 (
     std::int64_t capacity
+):
+    work_contract_group(capacity, {})
+{
+}
+
+
+//=============================================================================
+inline bcpp::system::work_contract_group::work_contract_group
+(
+    std::int64_t capacity,
+    event_handlers eventHandlers
 ):
     invocationCounter_(capacity - 1), 
     contracts_(capacity),
     surrenderToken_(capacity),
-    firstContractIndex_(capacity - 1)
+    firstContractIndex_(capacity - 1),
+    alertHandler_(eventHandlers.alertHandler_ ? eventHandlers.alertHandler_ : [](auto const &){})
 {
     for (auto && [index, contract] : ranges::v3::views::enumerate(contracts_))
         contract.flags_ = (index + 1);
@@ -205,8 +200,7 @@ inline bcpp::system::work_contract_group<T>::work_contract_group
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline bcpp::system::work_contract_group<T>::~work_contract_group
+inline bcpp::system::work_contract_group::~work_contract_group
 (
 )
 {
@@ -215,38 +209,32 @@ inline bcpp::system::work_contract_group<T>::~work_contract_group
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::work_contract_group<T>::stop
+inline void bcpp::system::work_contract_group::stop
 (
 )
 {
-    std::lock_guard lockGuard(mutex_);
-    stopped_ = true;
     for (auto & surrenderToken : surrenderToken_)
         if ((bool)surrenderToken)
             surrenderToken->orphan();
-    conditionVariable_.notify_all();
 }
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline auto bcpp::system::work_contract_group<T>::create_contract
+inline auto bcpp::system::work_contract_group::create_contract
 (
     std::function<void()> function
-) -> work_contract_type
+) -> work_contract
 {
     return create_contract(function, nullptr);
 }
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline auto bcpp::system::work_contract_group<T>::create_contract
+inline auto bcpp::system::work_contract_group::create_contract
 (
     std::function<void()> function,
     std::function<void()> surrender
-) -> work_contract_type
+) -> work_contract
 {
     std::lock_guard lockGuard(mutex_);
     auto contractId = nextAvail_.load();
@@ -263,10 +251,9 @@ inline auto bcpp::system::work_contract_group<T>::create_contract
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::work_contract_group<T>::surrender
+inline void bcpp::system::work_contract_group::surrender
 (
-    work_contract_type const & workContract
+    work_contract const & workContract
 )
 {
     set_contract_flag<contract::surrender_flag | contract::invoke_flag>(workContract);
@@ -274,10 +261,9 @@ inline void bcpp::system::work_contract_group<T>::surrender
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::work_contract_group<T>::invoke
+inline void bcpp::system::work_contract_group::invoke
 (
-    work_contract_type const & workContract
+    work_contract const & workContract
 )
 {
     set_contract_flag<contract::invoke_flag>(workContract);
@@ -285,11 +271,10 @@ inline void bcpp::system::work_contract_group<T>::invoke
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
 template <std::size_t flags_to_set>
-inline void bcpp::system::work_contract_group<T>::set_contract_flag
+inline void bcpp::system::work_contract_group::set_contract_flag
 (
-    work_contract_type const & workContract
+    work_contract const & workContract
 )
 {
     static auto constexpr flags_mask = (contract::execute_flag | contract::invoke_flag);
@@ -300,8 +285,7 @@ inline void bcpp::system::work_contract_group<T>::set_contract_flag
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline std::size_t bcpp::system::work_contract_group<T>::get_active_contract_count
+inline std::size_t bcpp::system::work_contract_group::get_active_contract_count
 (
 ) const
 {
@@ -310,8 +294,7 @@ inline std::size_t bcpp::system::work_contract_group<T>::get_active_contract_cou
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::work_contract_group<T>::increment_contract_count
+inline void bcpp::system::work_contract_group::increment_contract_count
 (
     std::int64_t current
 )
@@ -322,53 +305,12 @@ inline void bcpp::system::work_contract_group<T>::increment_contract_count
         auto addend = ((current-- & 1ull) ? left_addend : right_addend);
         invocationCounter_[current >>= 1].u64_ += addend;
     }
-    if constexpr (waitable)
-    {
-        conditionVariable_.notify_one();
-    }
+    alertHandler_(*this);
 }
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline std::size_t bcpp::system::work_contract_group<T>::execute_next_contract
-(
-    std::chrono::nanoseconds maxWaitTime
-)  requires (waitable)
-{
-    if constexpr (waitable)
-    {
-        if (!get_active_contract_count())
-        {
-            std::unique_lock uniqueLock(mutex_);
-            conditionVariable_.wait_for(uniqueLock, maxWaitTime, [&]{return get_active_contract_count();});
-        }
-    }
-    return process_contract();
-}
-
-
-//=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline std::size_t bcpp::system::work_contract_group<T>::execute_next_contract
-(
-)
-{
-    if constexpr (waitable)
-    {
-        if (!get_active_contract_count())
-        {
-            std::unique_lock uniqueLock(mutex_);
-            conditionVariable_.wait(uniqueLock, [&]{return ((stopped_) || (get_active_contract_count()));});
-        }
-    }
-    return process_contract();
-}
-
-
-//=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline std::size_t bcpp::system::work_contract_group<T>::process_contract
+inline void bcpp::system::work_contract_group::execute_next_contract
 (
 )
 {
@@ -385,14 +327,12 @@ inline std::size_t bcpp::system::work_contract_group<T>::process_contract
         }
         process_contract(parent);
     }
-    return invocationCounter_[0].get_count();
 }
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-template <bcpp::system::work_contract_group<T>::decrement_preference T_>
-inline std::int64_t bcpp::system::work_contract_group<T>::decrement_contract_count
+template <bcpp::system::work_contract_group::decrement_preference T_>
+inline std::int64_t bcpp::system::work_contract_group::decrement_contract_count
 (
     std::int64_t parent
 )
@@ -412,8 +352,7 @@ inline std::int64_t bcpp::system::work_contract_group<T>::decrement_contract_cou
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::work_contract_group<T>::process_contract
+inline void bcpp::system::work_contract_group::process_contract
 (
     std::int64_t parent
 )
@@ -441,8 +380,7 @@ inline void bcpp::system::work_contract_group<T>::process_contract
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline std::size_t bcpp::system::work_contract_group<T>::get_capacity
+inline std::size_t bcpp::system::work_contract_group::get_capacity
 (
 ) const
 {
@@ -451,8 +389,7 @@ inline std::size_t bcpp::system::work_contract_group<T>::get_capacity
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline bcpp::system::work_contract_group<T>::surrender_token::surrender_token
+inline bcpp::system::work_contract_group::surrender_token::surrender_token
 (
     work_contract_group * workContractGroup
 ):
@@ -462,10 +399,9 @@ inline bcpp::system::work_contract_group<T>::surrender_token::surrender_token
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline bool bcpp::system::work_contract_group<T>::surrender_token::invoke
+inline bool bcpp::system::work_contract_group::surrender_token::invoke
 (
-    work_contract_type const & workContract
+    work_contract const & workContract
 )
 {
     std::lock_guard lockGuard(mutex_);
@@ -479,8 +415,7 @@ inline bool bcpp::system::work_contract_group<T>::surrender_token::invoke
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::work_contract_group<T>::surrender_token::orphan
+inline void bcpp::system::work_contract_group::surrender_token::orphan
 (
 )
 {

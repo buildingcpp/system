@@ -1,5 +1,6 @@
 #pragma once
 
+#include <include/non_copyable.h>
 #include <library/system/cpu_id.h>
 #include <include/synchronization_mode.h>
 
@@ -10,12 +11,18 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
+#include <memory>
+#include <atomic>
 
 
 namespace bcpp::system 
 {
     
-    class thread_pool
+    class thread_pool :
+        non_copyable
     {
     public:
 
@@ -42,9 +49,21 @@ namespace bcpp::system
 
         void stop(synchronization_mode);
 
+        bool wait_stop_complete
+        (
+            std::chrono::nanoseconds
+        ) const;
+
+        void wait_stop_complete() const;
+
     private:
     
         std::vector<std::jthread>   threads_;
+
+        std::shared_ptr<std::atomic<std::size_t>>   threadCount_;
+
+        std::mutex mutable                          mutex_;
+        std::shared_ptr<std::condition_variable>    conditionVariable_;
     };
     
 } // namespace bcpp::system 

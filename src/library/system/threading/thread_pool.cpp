@@ -8,12 +8,14 @@ bcpp::system::thread_pool::thread_pool
 (
     configuration const & config
 ):
-    threads_(config.threads_.size())
+    threads_(config.threads_.size()),
+    threadCount_(std::make_shared<std::atomic<std::size_t>>(0)),
+    conditionVariable_(std::make_shared<std::condition_variable>())
 {
     auto index = 0;
     for (auto & thread : threads_)
     {
-        thread = std::jthread([config = config.threads_[index]]
+        thread = std::jthread([config = config.threads_[index], threadCount = threadCount_, conditionVariable = conditionVariable_]
                 (
                     std::stop_token stopToken
                 )
@@ -22,7 +24,7 @@ bcpp::system::thread_pool::thread_pool
                     {
                         if (config.cpuId_.has_value())
                             set_cpu_affinity(config.cpuId_.value());
-
+                        ++(*threadCount);
                         if (config.initializeHandler_)
                             config.initializeHandler_();
                         config.function_(stopToken);
@@ -37,6 +39,8 @@ bcpp::system::thread_pool::thread_pool
                         else
                             std::rethrow_exception(currentException);
                     }
+                    if (--(*threadCount) == 0)
+                        conditionVariable->notify_all();
                 });
         ++index;
     }
@@ -68,4 +72,25 @@ void bcpp::system::thread_pool::stop
         for (auto & thread : threads_)
             if (thread.joinable())
                 thread.join();
+}
+
+
+//=============================================================================
+bool bcpp::system::thread_pool::wait_stop_complete
+(
+    std::chrono::nanoseconds duration
+) const
+{
+    std::unique_lock uniqueLock(mutex_);
+    return conditionVariable_->wait_for(uniqueLock, duration, [this](){return ((*threadCount_) == 0);});
+}
+
+
+//=============================================================================
+void bcpp::system::thread_pool::wait_stop_complete
+(
+) const
+{
+    std::unique_lock uniqueLock(mutex_);
+    return conditionVariable_->wait(uniqueLock, [this](){return ((*threadCount_) == 0);});
 }

@@ -15,8 +15,7 @@
 #include <fmt/format.h>
 
 
-using work_contract_group_type = bcpp::system::waitable_work_contract_group;
-using work_contract_type = bcpp::system::work_contract<work_contract_group_type::mode>;
+using namespace bcpp::system;
 
 
 //=============================================================================
@@ -28,8 +27,8 @@ void example
 
     // create work contract group
     static auto constexpr max_number_of_contracts = 32;
-    work_contract_group_type workContractGroup(max_number_of_contracts);
-    work_contract_type workContract;
+    work_contract_group workContractGroup(max_number_of_contracts);
+    work_contract workContract;
 
     // create worker threads to service work contracts asynchronously
     auto max_number_of_worker_threads = std::thread::hardware_concurrency() / 2;

@@ -12,8 +12,8 @@
 
 #include <library/system.h>
 
-using work_contract_group_type = bcpp::system::waitable_work_contract_group;
-using work_contract_type = bcpp::system::work_contract<work_contract_group_type::mode>;
+
+using namespace bcpp::system;
 
 
 //=============================================================================
@@ -24,8 +24,8 @@ void bare_minimum_example
     // however, a mimium example is useful for understading the basic concepts.
 )
 {
-    work_contract_group_type workContractGroup(8);
-    auto workContract = workContractGroup.create_contract([](){std::cout << "contract invoked\n";}, nullptr);
+    work_contract_group workContractGroup(8);
+    auto workContract = workContractGroup.create_contract([](){std::cout << "contract invoked\n";});
     workContract.invoke();
     workContractGroup.execute_next_contract();
 }
@@ -41,7 +41,7 @@ void work_contract_after_group_destroyed_test
     // surrender FAILS in the case where the work contract group has already been destroyed.
 )
 {
-    auto workContractGroup = std::make_unique<work_contract_group_type>(8);
+    auto workContractGroup = std::make_unique<work_contract_group>(8);
     auto workContract = workContractGroup->create_contract([](){std::cout << "contract invoked\n";}, nullptr);
 
     workContract.invoke();
@@ -63,13 +63,13 @@ void basic_example
 {
     // create work contract group
     static auto constexpr max_number_of_contracts = 32;
-    work_contract_group_type workContractGroup(max_number_of_contracts);
+    work_contract_group workContractGroup(max_number_of_contracts);
 
     // create worker thread to service work contracts asynchronously
     std::jthread workerThread([&](auto const & stopToken)
             {
                 while (!stopToken.stop_requested()) 
-                    workContractGroup.execute_next_contract(std::chrono::milliseconds(10));
+                    workContractGroup.execute_next_contract();
             });
 
     std::atomic<std::size_t> invokeCounter{16};
@@ -103,7 +103,7 @@ void measure_multithreaded_concurrent_contracts
     static auto const num_worker_threads = std::thread::hardware_concurrency() / 2;
     static auto constexpr test_duration = std::chrono::milliseconds(1000);
     static auto constexpr max_contracts = (1 << 20);
-    static auto constexpr max_concurrent_contracts = 256;
+    static auto constexpr max_concurrent_contracts = 32;
     static std::vector<std::size_t> contractId;
 
     static auto once = [&]()
@@ -121,10 +121,13 @@ void measure_multithreaded_concurrent_contracts
             }();
 
     // enable each contract to invoke the next random contract upon its own completion.
-    work_contract_group_type workContractGroup(max_contracts);
+    std::mutex mutex;
+    std::condition_variable conditionVariable;
+
+    work_contract_group workContractGroup(max_contracts, {.alertHandler_ = [&](auto const &){conditionVariable.notify_one();}});
     std::atomic<std::size_t> totalTaskCount;
     thread_local std::size_t taskCount;
-    std::vector<work_contract_type> workContracts(max_contracts);
+    std::vector<work_contract> workContracts(max_contracts);
     for (auto i = 0; i < max_contracts; ++i)
         workContracts[i] = workContractGroup.create_contract([&, index = i]() mutable{++taskCount; workContracts[index = contractId[index]].invoke();});
 
@@ -143,16 +146,31 @@ void measure_multithreaded_concurrent_contracts
                 ) mutable
                 {
                     while (!stopToken.stop_requested()) 
+                    {
+                        if (workContractGroup.get_active_contract_count() == 0)
+                        {
+                            std::unique_lock uniqueLock(mutex);
+                            conditionVariable.wait(uniqueLock, [&](){return (workContractGroup.get_active_contract_count() > 0);});
+                        }
                         workContractGroup.execute_next_contract(); 
+                    }
                     totalTaskCount += taskCount;
                     taskCount = 0;
                 };
     }
     bcpp::system::thread_pool threadPool({.threads_ = threads});
 
+    // start test
     auto startTime = std::chrono::system_clock::now();
+    // wait for duration of test
     std::this_thread::sleep_for(test_duration);
-    threadPool.stop(bcpp::system::synchronization_mode::blocking);
+    // stop worker threads
+    threadPool.stop(synchronization_mode::async);
+    // wake any waiting worker threads
+    conditionVariable.notify_all();
+    // wait for all threads to exit
+    threadPool.wait_stop_complete();
+    // test completed
     auto stopTime = std::chrono::system_clock::now();
     auto elapsedTime = (stopTime - startTime);
     auto test_duration_in_sec = (double)std::chrono::duration_cast<std::chrono::nanoseconds>(elapsedTime).count() / std::nano::den;
@@ -169,11 +187,11 @@ int main
     char const **
 )
 {    
-
+/*
     {
     // create a work_contract_group
     static auto constexpr max_contracts = (1 << 20);
-    work_contract_group_type workContractGroup(max_contracts);
+    work_contract_group workContractGroup(max_contracts);
 
     // create a work_contract
     auto counter = 0;
@@ -195,7 +213,7 @@ int main
        // execute invoked work_contracts
        workContractGroup.execute_next_contract();
 }
-
+*/
     bare_minimum_example();
     basic_example();
     work_contract_after_group_destroyed_test();
