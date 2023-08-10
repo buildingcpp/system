@@ -62,7 +62,7 @@ namespace bcpp::system
 
         std::shared_ptr<std::atomic<std::size_t>>   threadCount_;
 
-        std::mutex mutable                          mutex_;
+        std::shared_ptr<std::mutex>                 mutex_;
         std::shared_ptr<std::condition_variable>    conditionVariable_;
     };
     

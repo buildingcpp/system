@@ -10,12 +10,13 @@ bcpp::system::thread_pool::thread_pool
 ):
     threads_(config.threads_.size()),
     threadCount_(std::make_shared<std::atomic<std::size_t>>(0)),
+    mutex_(std::make_shared<std::mutex>()),
     conditionVariable_(std::make_shared<std::condition_variable>())
 {
     auto index = 0;
     for (auto & thread : threads_)
     {
-        thread = std::jthread([config = config.threads_[index], threadCount = threadCount_, conditionVariable = conditionVariable_]
+        thread = std::jthread([config = config.threads_[index], threadCount = threadCount_, mutex = mutex_, conditionVariable = conditionVariable_]
                 (
                     std::stop_token stopToken
                 )
@@ -40,7 +41,10 @@ bcpp::system::thread_pool::thread_pool
                             std::rethrow_exception(currentException);
                     }
                     if (--(*threadCount) == 0)
+                    {
+                        std::lock_guard lockGuard(*mutex);
                         conditionVariable->notify_all();
+                    }
                 });
         ++index;
     }
@@ -81,7 +85,7 @@ bool bcpp::system::thread_pool::wait_stop_complete
     std::chrono::nanoseconds duration
 ) const
 {
-    std::unique_lock uniqueLock(mutex_);
+    std::unique_lock uniqueLock(*mutex_);
     return conditionVariable_->wait_for(uniqueLock, duration, [this](){return ((*threadCount_) == 0);});
 }
 
@@ -91,6 +95,6 @@ void bcpp::system::thread_pool::wait_stop_complete
 (
 ) const
 {
-    std::unique_lock uniqueLock(mutex_);
+    std::unique_lock uniqueLock(*mutex_);
     return conditionVariable_->wait(uniqueLock, [this](){return ((*threadCount_) == 0);});
 }

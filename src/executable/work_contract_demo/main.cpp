@@ -124,7 +124,19 @@ void measure_multithreaded_concurrent_contracts
     std::mutex mutex;
     std::condition_variable conditionVariable;
 
-    work_contract_group workContractGroup(max_contracts, {.alertHandler_ = [&](auto const &){conditionVariable.notify_one();}});
+    std::atomic<std::size_t> nonEmptyCount{0};
+    work_contract_group workContractGroup(max_contracts, {.alertHandler_ = [&](auto const &, auto increment)
+            {
+                if (increment)
+                {
+                    if (++nonEmptyCount == 1)
+                        conditionVariable.notify_all();
+                }
+                else
+                {
+                    --nonEmptyCount;
+                }
+            }});
     std::atomic<std::size_t> totalTaskCount;
     thread_local std::size_t taskCount;
     std::vector<work_contract> workContracts(max_contracts);
@@ -147,10 +159,10 @@ void measure_multithreaded_concurrent_contracts
                 {
                     while (!stopToken.stop_requested()) 
                     {
-                        if (workContractGroup.get_active_contract_count() == 0)
+                        if (nonEmptyCount == 0)
                         {
                             std::unique_lock uniqueLock(mutex);
-                            conditionVariable.wait(uniqueLock, [&](){return (workContractGroup.get_active_contract_count() > 0);});
+                            conditionVariable.wait(uniqueLock, [&](){return (nonEmptyCount > 0);});
                         }
                         workContractGroup.execute_next_contract(); 
                     }
@@ -170,6 +182,7 @@ void measure_multithreaded_concurrent_contracts
     conditionVariable.notify_all();
     // wait for all threads to exit
     threadPool.wait_stop_complete();
+    workContractGroup.stop();
     // test completed
     auto stopTime = std::chrono::system_clock::now();
     auto elapsedTime = (stopTime - startTime);

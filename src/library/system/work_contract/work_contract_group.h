@@ -21,7 +21,7 @@ namespace bcpp::system
 
         class surrender_token;
 
-        using alert_handler = std::function<void(work_contract_group const &)>;
+        using alert_handler = std::function<void(work_contract_group const &, bool)>;
 
         struct event_handlers
         {
@@ -104,7 +104,7 @@ namespace bcpp::system
         };
 
         template <decrement_preference>
-        std::int64_t decrement_contract_count(std::int64_t);
+        std::pair<std::int64_t, std::uint64_t> decrement_contract_count(std::int64_t);
 
         std::size_t process_contract();
 
@@ -190,7 +190,7 @@ inline bcpp::system::work_contract_group::work_contract_group
     contracts_(capacity),
     surrenderToken_(capacity),
     firstContractIndex_(capacity - 1),
-    alertHandler_(eventHandlers.alertHandler_ ? eventHandlers.alertHandler_ : [](auto const &){})
+    alertHandler_(eventHandlers.alertHandler_ ? eventHandlers.alertHandler_ : [](auto const &, auto){})
 {
     for (auto && [index, contract] : ranges::v3::views::enumerate(contracts_))
         contract.flags_ = (index + 1);
@@ -299,13 +299,36 @@ inline void bcpp::system::work_contract_group::increment_contract_count
     std::int64_t current
 )
 {
+    std::uint64_t rootCount = 0;
     current += firstContractIndex_;
     while (current)
     {
         auto addend = ((current-- & 1ull) ? left_addend : right_addend);
-        invocationCounter_[current >>= 1].u64_ += addend;
+        rootCount = (invocationCounter_[current >>= 1].u64_ += addend);
     }
-    alertHandler_(*this);
+    if ((((rootCount >> 32) + rootCount) & 0xffffffff) == 1)
+        alertHandler_(*this, true);
+}
+
+
+//=============================================================================
+template <bcpp::system::work_contract_group::decrement_preference T_>
+inline auto bcpp::system::work_contract_group::decrement_contract_count
+(
+    std::int64_t parent
+) -> std::pair<std::int64_t, std::uint64_t> 
+{
+    static auto constexpr left_preference = (T_ == decrement_preference::left);
+    static auto constexpr mask = (left_preference) ? left_mask : right_mask;
+    static auto constexpr prefered_addend = (left_preference) ? left_addend : right_addend;
+    static auto constexpr fallback_addend = (left_preference) ? right_addend : left_addend;
+
+    auto & invocationCounter = invocationCounter_[parent].u64_;
+    auto expected = invocationCounter.load();
+    auto addend = (expected & mask) ? prefered_addend : fallback_addend;
+    while ((expected != 0) && (!invocationCounter.compare_exchange_strong(expected, expected - addend)))
+        addend = (expected & mask) ? prefered_addend : fallback_addend;
+    return {expected ? (1 + (addend > left_mask)) : 0, expected - addend};
 }
 
 
@@ -318,36 +341,19 @@ inline void bcpp::system::work_contract_group::execute_next_contract
     static auto constexpr left = decrement_preference::left;
 
     std::uint64_t preferenceFlags = preferenceFlags_++;
-    if (auto parent = (preferenceFlags & 1) ? decrement_contract_count<right>(0) : decrement_contract_count<left>(0))   
+    auto [parent, rootCount] = ((preferenceFlags & 1) ? decrement_contract_count<right>(0) : decrement_contract_count<left>(0));
+    if (parent)  
     {
+        if (rootCount == 0)
+            alertHandler_(*this, false);
         while (parent < firstContractIndex_) 
         {
-            parent = (parent * 2) + ((preferenceFlags & 1) ? decrement_contract_count<right>(parent) : decrement_contract_count<left>(parent));
+            auto [n, _] = ((preferenceFlags & 1) ? decrement_contract_count<right>(parent) : decrement_contract_count<left>(parent));
+            parent = (parent * 2) + n;
             preferenceFlags >>= 1;
         }
         process_contract(parent);
     }
-}
-
-
-//=============================================================================
-template <bcpp::system::work_contract_group::decrement_preference T_>
-inline std::int64_t bcpp::system::work_contract_group::decrement_contract_count
-(
-    std::int64_t parent
-)
-{
-    static auto constexpr left_preference = (T_ == decrement_preference::left);
-    static auto constexpr mask = (left_preference) ? left_mask : right_mask;
-    static auto constexpr prefered_addend = (left_preference) ? left_addend : right_addend;
-    static auto constexpr fallback_addend = (left_preference) ? right_addend : left_addend;
-
-    auto & invocationCounter = invocationCounter_[parent].u64_;
-    auto expected = invocationCounter.load();
-    auto addend = (expected & mask) ? prefered_addend : fallback_addend;
-    while ((expected != 0) && (!invocationCounter.compare_exchange_strong(expected, expected - addend)))
-        addend = (expected & mask) ? prefered_addend : fallback_addend;
-    return expected ? (1 + (addend > left_mask)) : 0;
 }
 
 
