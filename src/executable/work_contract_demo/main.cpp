@@ -94,16 +94,16 @@ void basic_example
 
 
 //=============================================================================
-void measure_multithreaded_concurrent_contracts
+std::size_t measure_multithreaded_concurrent_contracts
 (
     // measure performance where max number of contracts is large and where
     // there are always some preconfigured number of contracts invoked.
 )
 {
-    static auto const num_worker_threads = std::thread::hardware_concurrency() / 2;
+    static auto const num_worker_threads = std::thread::hardware_concurrency();
     static auto constexpr test_duration = std::chrono::milliseconds(1000);
     static auto constexpr max_contracts = (1 << 20);
-    static auto constexpr max_concurrent_contracts = 32;
+    static auto const max_concurrent_contracts = std::thread::hardware_concurrency() / 2;
     static std::vector<std::size_t> contractId;
 
     static auto once = [&]()
@@ -121,27 +121,20 @@ void measure_multithreaded_concurrent_contracts
             }();
 
     // enable each contract to invoke the next random contract upon its own completion.
-    std::mutex mutex;
-    std::condition_variable conditionVariable;
-
-    std::atomic<std::size_t> nonEmptyCount{0};
-    work_contract_group workContractGroup(max_contracts, {.alertHandler_ = [&](auto const &, auto increment)
-            {
-                if (increment)
-                {
-                    if (++nonEmptyCount == 1)
-                        conditionVariable.notify_all();
-                }
-                else
-                {
-                    --nonEmptyCount;
-                }
-            }});
+    work_contract_group workContractGroup(max_contracts);
     std::atomic<std::size_t> totalTaskCount;
     thread_local std::size_t taskCount;
     std::vector<work_contract> workContracts(max_contracts);
+
+    std::atomic<std::size_t> noDiscard;
+
     for (auto i = 0; i < max_contracts; ++i)
-        workContracts[i] = workContractGroup.create_contract([&, index = i]() mutable{++taskCount; workContracts[index = contractId[index]].invoke();});
+        workContracts[i] = workContractGroup.create_contract([&, index = i]() mutable
+                {
+                    std::this_thread::sleep_for(std::chrono::microseconds(1));
+                    ++taskCount;
+                    workContracts[index = contractId[index]].invoke();
+                });
 
     // invoke the correct number of concurrent contracts to start things off
     for (auto i = 0; i < max_concurrent_contracts; ++i)
@@ -158,14 +151,7 @@ void measure_multithreaded_concurrent_contracts
                 ) mutable
                 {
                     while (!stopToken.stop_requested()) 
-                    {
-                        if (nonEmptyCount == 0)
-                        {
-                            std::unique_lock uniqueLock(mutex);
-                            conditionVariable.wait(uniqueLock, [&](){return (nonEmptyCount > 0);});
-                        }
-                        workContractGroup.execute_next_contract(); 
-                    }
+                        workContractGroup.execute_next_contract(std::chrono::seconds(1)); 
                     totalTaskCount += taskCount;
                     taskCount = 0;
                 };
@@ -178,8 +164,6 @@ void measure_multithreaded_concurrent_contracts
     std::this_thread::sleep_for(test_duration);
     // stop worker threads
     threadPool.stop(synchronization_mode::async);
-    // wake any waiting worker threads
-    conditionVariable.notify_all();
     // wait for all threads to exit
     threadPool.wait_stop_complete();
     workContractGroup.stop();
@@ -190,6 +174,7 @@ void measure_multithreaded_concurrent_contracts
 
     std::cout << "Total tasks = " << totalTaskCount << ", tasks per sec = " << (int)(totalTaskCount / test_duration_in_sec) << 
             ", tasks per thread per sec = " << (int)((totalTaskCount / test_duration_in_sec) / num_worker_threads) << std::endl;
+    return noDiscard;
 }
 
 
@@ -200,40 +185,14 @@ int main
     char const **
 )
 {    
-/*
-    {
-    // create a work_contract_group
-    static auto constexpr max_contracts = (1 << 20);
-    work_contract_group workContractGroup(max_contracts);
-
-    // create a work_contract
-    auto counter = 0;
-    auto workContract = workContractGroup.create_contract(
-            [&](){std::cout << "contract executed: " << ++counter << "\n";},
-            [](){std::cout << "contract surrendered\n";});
-
-        for (auto i = 0; i < 10; ++i)
-        {
-                // invoke the work_contract
-            workContract.invoke();
-
-            // execute invoked work_contracts
-            workContractGroup.execute_next_contract();
-        }
-       // surrender the work_contract
-       workContract.surrender();
-
-       // execute invoked work_contracts
-       workContractGroup.execute_next_contract();
-}
-*/
     bare_minimum_example();
     basic_example();
     work_contract_after_group_destroyed_test();
 
     static auto constexpr num_loops = 10;
+    std::size_t noDiscard = 0;
     for (auto i = 0; i < num_loops; ++i)
-        measure_multithreaded_concurrent_contracts();
+        noDiscard += measure_multithreaded_concurrent_contracts();
 
-    return 0;
+    return noDiscard;
 }

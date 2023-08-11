@@ -19,24 +19,13 @@ namespace bcpp::system
     {
     public:
 
+        static auto constexpr allow_sleep = true;//false;
+
         class surrender_token;
-
-        using alert_handler = std::function<void(work_contract_group const &, bool)>;
-
-        struct event_handlers
-        {
-            alert_handler alertHandler_;
-        };
 
         work_contract_group
         (
             std::int64_t
-        );
-
-        work_contract_group
-        (
-            std::int64_t,
-            event_handlers
         );
 
         ~work_contract_group();
@@ -53,6 +42,11 @@ namespace bcpp::system
         );
 
         void execute_next_contract();
+
+        void execute_next_contract
+        (
+            std::chrono::nanoseconds
+        );
 
         std::size_t get_capacity() const;
 
@@ -142,7 +136,11 @@ namespace bcpp::system
         
         std::atomic<std::uint64_t>                      preferenceFlags_;
 
-        alert_handler                                   alertHandler_;
+        std::atomic<bool>                               stopped_{false};
+
+        // for non-spin version
+        std::condition_variable     conditionVariable_;
+        std::atomic<std::size_t>    activeCount_;
 
     }; // class work_contract_group
 
@@ -175,22 +173,10 @@ inline bcpp::system::work_contract_group::work_contract_group
 (
     std::int64_t capacity
 ):
-    work_contract_group(capacity, {})
-{
-}
-
-
-//=============================================================================
-inline bcpp::system::work_contract_group::work_contract_group
-(
-    std::int64_t capacity,
-    event_handlers eventHandlers
-):
     invocationCounter_(capacity - 1), 
     contracts_(capacity),
     surrenderToken_(capacity),
-    firstContractIndex_(capacity - 1),
-    alertHandler_(eventHandlers.alertHandler_ ? eventHandlers.alertHandler_ : [](auto const &, auto){})
+    firstContractIndex_(capacity - 1)
 {
     for (auto && [index, contract] : ranges::v3::views::enumerate(contracts_))
         contract.flags_ = (index + 1);
@@ -213,9 +199,17 @@ inline void bcpp::system::work_contract_group::stop
 (
 )
 {
-    for (auto & surrenderToken : surrenderToken_)
-        if ((bool)surrenderToken)
-            surrenderToken->orphan();
+    if (bool wasRunning = !stopped_.exchange(true); wasRunning)
+    {
+        for (auto & surrenderToken : surrenderToken_)
+            if ((bool)surrenderToken)
+                surrenderToken->orphan();
+        if constexpr (allow_sleep)
+        {
+            std::unique_lock uniqueLock(mutex_);
+            conditionVariable_.notify_all();
+        }
+    }
 }
 
 
@@ -306,8 +300,18 @@ inline void bcpp::system::work_contract_group::increment_contract_count
         auto addend = ((current-- & 1ull) ? left_addend : right_addend);
         rootCount = (invocationCounter_[current >>= 1].u64_ += addend);
     }
-    if ((((rootCount >> 32) + rootCount) & 0xffffffff) == 1)
-        alertHandler_(*this, true);
+
+    if constexpr (allow_sleep)
+    {
+        if ((((rootCount >> 32) + rootCount) & 0xffffffff) == 1)
+        {
+            if (++activeCount_ == 1)
+            {
+                std::lock_guard lockGuard(mutex_);
+                conditionVariable_.notify_all();
+            }
+        }
+    }
 }
 
 
@@ -335,6 +339,44 @@ inline auto bcpp::system::work_contract_group::decrement_contract_count
 //=============================================================================
 inline void bcpp::system::work_contract_group::execute_next_contract
 (
+    std::chrono::nanoseconds duration
+)
+{
+    static auto constexpr right = decrement_preference::right;
+    static auto constexpr left = decrement_preference::left;
+
+    if constexpr (allow_sleep)
+    {
+        if (activeCount_ == 0)
+        {
+            std::unique_lock uniqueLock(mutex_);
+            conditionVariable_.wait_for(uniqueLock, duration, [this](){return ((activeCount_ > 0) || (stopped_));});
+        }
+    }
+
+    std::uint64_t preferenceFlags = preferenceFlags_++;
+    auto [parent, rootCount] = ((preferenceFlags & 1) ? decrement_contract_count<right>(0) : decrement_contract_count<left>(0));
+    if (parent)  
+    {
+        if constexpr (allow_sleep)
+        {
+            if (rootCount == 0)
+                --activeCount_;
+        }
+        while (parent < firstContractIndex_) 
+        {
+            auto [n, _] = ((preferenceFlags & 1) ? decrement_contract_count<right>(parent) : decrement_contract_count<left>(parent));
+            parent = (parent * 2) + n;
+            preferenceFlags >>= 1;
+        }
+        process_contract(parent);
+    }
+}
+
+
+//=============================================================================
+inline void bcpp::system::work_contract_group::execute_next_contract
+(
 )
 {
     static auto constexpr right = decrement_preference::right;
@@ -344,8 +386,10 @@ inline void bcpp::system::work_contract_group::execute_next_contract
     auto [parent, rootCount] = ((preferenceFlags & 1) ? decrement_contract_count<right>(0) : decrement_contract_count<left>(0));
     if (parent)  
     {
-        if (rootCount == 0)
-            alertHandler_(*this, false);
+        if constexpr (allow_sleep)
+        {
+            --activeCount_;
+        }
         while (parent < firstContractIndex_) 
         {
             auto [n, _] = ((preferenceFlags & 1) ? decrement_contract_count<right>(parent) : decrement_contract_count<left>(parent));
