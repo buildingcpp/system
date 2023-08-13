@@ -94,16 +94,16 @@ void basic_example
 
 
 //=============================================================================
-std::size_t measure_multithreaded_concurrent_contracts
+void measure_multithreaded_concurrent_contracts
 (
     // measure performance where max number of contracts is large and where
     // there are always some preconfigured number of contracts invoked.
 )
 {
-    static auto const num_worker_threads = std::thread::hardware_concurrency();
+    static auto const num_worker_threads = std::thread::hardware_concurrency() / 2;
     static auto constexpr test_duration = std::chrono::milliseconds(1000);
-    static auto constexpr max_contracts = (1 << 20);
-    static auto const max_concurrent_contracts = std::thread::hardware_concurrency() / 2;
+    static auto constexpr max_contracts = (1 << 16);
+    static auto const max_concurrent_contracts = num_worker_threads / 2;
     static std::vector<std::size_t> contractId;
 
     static auto once = [&]()
@@ -122,22 +122,34 @@ std::size_t measure_multithreaded_concurrent_contracts
 
     // enable each contract to invoke the next random contract upon its own completion.
     work_contract_group workContractGroup(max_contracts);
-    std::atomic<std::size_t> totalTaskCount;
+    std::atomic<std::size_t> totalTaskCount[max_contracts];
     thread_local std::size_t taskCount;
     std::vector<work_contract> workContracts(max_contracts);
-
-    std::atomic<std::size_t> noDiscard;
 
     for (auto i = 0; i < max_contracts; ++i)
         workContracts[i] = workContractGroup.create_contract([&, index = i]() mutable
                 {
-                    std::this_thread::sleep_for(std::chrono::microseconds(1));
+                //    std::this_thread::sleep_for(std::chrono::microseconds(1));
                     ++taskCount;
-                    workContracts[index = contractId[index]].invoke();
+                    totalTaskCount[index]++;
+                    workContracts[index].invoke();
+                    return;
+
+                    if (index & 1)
+                    {
+                        if (totalTaskCount[index] & 1)
+                            workContracts[index].invoke();
+                    }
+                    else
+                    {
+                        if ((totalTaskCount[index] & 0x07) == 0x07)
+                            workContracts[index + 1].invoke();
+                        workContracts[index].invoke();
+                    }
                 });
 
     // invoke the correct number of concurrent contracts to start things off
-    for (auto i = 0; i < max_concurrent_contracts; ++i)
+    for (auto i = 0; i < max_contracts; ++i)
         workContracts[i].invoke();
 
     // create a worker thread pool and direct the threads to service the work contract group - also very simple
@@ -152,8 +164,6 @@ std::size_t measure_multithreaded_concurrent_contracts
                 {
                     while (!stopToken.stop_requested()) 
                         workContractGroup.execute_next_contract(std::chrono::seconds(1)); 
-                    totalTaskCount += taskCount;
-                    taskCount = 0;
                 };
     }
     bcpp::system::thread_pool threadPool({.threads_ = threads});
@@ -172,9 +182,16 @@ std::size_t measure_multithreaded_concurrent_contracts
     auto elapsedTime = (stopTime - startTime);
     auto test_duration_in_sec = (double)std::chrono::duration_cast<std::chrono::nanoseconds>(elapsedTime).count() / std::nano::den;
 
-    std::cout << "Total tasks = " << totalTaskCount << ", tasks per sec = " << (int)(totalTaskCount / test_duration_in_sec) << 
-            ", tasks per thread per sec = " << (int)((totalTaskCount / test_duration_in_sec) / num_worker_threads) << std::endl;
-    return noDiscard;
+    auto n = 0;    
+    for (auto i = 0; i < max_contracts; ++i)
+    {
+    //    std::cout << "contract " << i << " executed " << totalTaskCount[i] << " times\n";
+        n += totalTaskCount[i];
+    }
+    std::cout << "Total tasks = " << n << ", tasks per sec = " << (int)(n / test_duration_in_sec) << 
+            ", tasks per thread per sec = " << (int)((n / test_duration_in_sec) / num_worker_threads) << std::endl;
+
+
 }
 
 
@@ -190,9 +207,8 @@ int main
     work_contract_after_group_destroyed_test();
 
     static auto constexpr num_loops = 10;
-    std::size_t noDiscard = 0;
     for (auto i = 0; i < num_loops; ++i)
-        noDiscard += measure_multithreaded_concurrent_contracts();
+        measure_multithreaded_concurrent_contracts();
 
-    return noDiscard;
+    return 0;
 }

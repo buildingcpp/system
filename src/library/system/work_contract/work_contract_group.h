@@ -19,7 +19,7 @@ namespace bcpp::system
     {
     public:
 
-        static auto constexpr allow_sleep = true;//false;
+        static auto constexpr allow_sleep = false;//false;
 
         class surrender_token;
 
@@ -365,9 +365,9 @@ inline void bcpp::system::work_contract_group::execute_next_contract
         }
         while (parent < firstContractIndex_) 
         {
+            preferenceFlags >>= 1;
             auto [n, _] = ((preferenceFlags & 1) ? decrement_contract_count<right>(parent) : decrement_contract_count<left>(parent));
             parent = (parent * 2) + n;
-            preferenceFlags >>= 1;
         }
         process_contract(parent);
     }
