@@ -19,7 +19,15 @@ namespace bcpp::system
     {
     public:
 
-        static auto constexpr allow_sleep = false;//false;
+        // allow_wait
+        //
+        // TRUE: uses condition_variable to allow threads to sleep while waiting for contracts to execute.
+        // This mode is better for standard applications.
+        //
+        // FALSE: threads will return immediately if there are no contracts to execute.  
+        // This mode is for spinning and is useful for low latency environments.
+        
+        static auto constexpr allow_wait = true;
 
         class surrender_token;
 
@@ -91,13 +99,13 @@ namespace bcpp::system
             work_contract const &
         );
 
-        enum class decrement_preference : std::uint32_t
+        enum class inclination : std::uint32_t
         {
             left = 0,
             right = 1
         };
 
-        template <decrement_preference>
+        template <inclination>
         std::pair<std::int64_t, std::uint64_t> decrement_contract_count(std::int64_t);
 
         std::size_t process_contract();
@@ -122,7 +130,28 @@ namespace bcpp::system
             }
         };
 
+        template <std::uint64_t N>
+        std::uint64_t select_contract
+        (
+            std::uint64_t &,
+            std::uint64_t
+        );
+
+        template <std::uint64_t N>
+        std::uint64_t select_contract_bit
+        (
+            std::uint64_t,
+            std::uint64_t,
+            std::uint64_t
+        ) const;
+
+        std::size_t get_available_contract();
+
+        std::uint64_t const capacity_;
         std::vector<invocation_counter>                 invocationCounter_;
+        std::vector<std::atomic<std::uint64_t>>         invokedFlag_;
+
+        std::vector<invocation_counter>                 contractCounter_;
 
         std::vector<contract>                           contracts_;
 
@@ -132,16 +161,11 @@ namespace bcpp::system
 
         std::mutex                                      mutex_;
 
-        std::atomic<std::uint32_t>                      nextAvail_;
-        
-        std::atomic<std::uint64_t>                      preferenceFlags_;
-
         std::atomic<bool>                               stopped_{false};
 
-        // for non-spin version
-        std::condition_variable     conditionVariable_;
-        std::atomic<std::size_t>    activeCount_;
-
+        // for 'waitable' version
+        std::condition_variable                         conditionVariable_;
+        std::atomic<std::size_t>                        activeCount_;
     }; // class work_contract_group
 
 
@@ -173,15 +197,25 @@ inline bcpp::system::work_contract_group::work_contract_group
 (
     std::int64_t capacity
 ):
-    invocationCounter_(capacity - 1), 
-    contracts_(capacity),
-    surrenderToken_(capacity),
-    firstContractIndex_(capacity - 1)
+    capacity_((capacity < 256) ? 256 : ((capacity + 63) / 64) * 64),
+    invocationCounter_(capacity_ / 32),
+    contractCounter_(capacity_),
+    invokedFlag_(capacity_ / 64),
+    contracts_(capacity_),
+    surrenderToken_(capacity_)
 {
-    for (auto && [index, contract] : ranges::v3::views::enumerate(contracts_))
-        contract.flags_ = (index + 1);
-    contracts_.back().flags_ = ~0;
-    nextAvail_ = 0;
+    firstContractIndex_ = ((capacity_ / 64) - 1);
+
+    std::uint32_t c = capacity_;
+    auto n = 1;
+    auto k = 0;
+    while (c > 1)
+    {
+        for (auto i = 0; i < n; ++i)
+            contractCounter_[k++].u32_ = {c / 2, c / 2};
+        n <<= 1;
+        c >>= 1;
+    }
 }
 
 
@@ -204,7 +238,7 @@ inline void bcpp::system::work_contract_group::stop
         for (auto & surrenderToken : surrenderToken_)
             if ((bool)surrenderToken)
                 surrenderToken->orphan();
-        if constexpr (allow_sleep)
+        if constexpr (allow_wait)
         {
             std::unique_lock uniqueLock(mutex_);
             conditionVariable_.notify_all();
@@ -230,12 +264,11 @@ inline auto bcpp::system::work_contract_group::create_contract
     std::function<void()> surrender
 ) -> work_contract
 {
-    std::lock_guard lockGuard(mutex_);
-    auto contractId = nextAvail_.load();
+
+    std::uint32_t contractId = get_available_contract();
     if (contractId == ~0)
         return {}; // no free contracts
     auto & contract = contracts_[contractId];
-    nextAvail_ = contract.flags_.load();
     contract.flags_ = 0;
     contract.work_ = function;
     contract.surrender_ = surrender;
@@ -279,6 +312,35 @@ inline void bcpp::system::work_contract_group::set_contract_flag
 
 
 //=============================================================================
+inline std::size_t bcpp::system::work_contract_group::get_available_contract
+(
+    // find an unclaimed contract
+    // do so with consideration to how balanced the tree is
+)
+{
+    auto select_child = [&]
+    (
+        std::size_t parent
+    )
+    {
+        auto & contractCounter = contractCounter_[parent].u64_;
+        auto expected = contractCounter.load();
+        auto addend = ((expected & 0xffffffff) > (expected >> 32)) ? left_addend : right_addend;
+        while ((expected != 0) && (!contractCounter.compare_exchange_strong(expected, expected - addend)))
+            addend = ((expected & 0xffffffff) > (expected >> 32)) ? left_addend : right_addend;
+        return expected ? ((parent * 2) + 1 + (addend == right_addend)) : 0;
+    };
+
+    auto parent = select_child(0);
+    while ((parent) && (parent < (capacity_ - 1)))
+        parent = select_child(parent);
+    if (parent)
+        return (parent - (capacity_ - 1));
+    return ~0;
+}
+
+
+//=============================================================================
 inline std::size_t bcpp::system::work_contract_group::get_active_contract_count
 (
 ) const
@@ -293,6 +355,9 @@ inline void bcpp::system::work_contract_group::increment_contract_count
     std::int64_t current
 )
 {
+    invokedFlag_[current / 64] |= ((0x8000000000000000ull) >> (current & 63));
+    current /= 64;
+
     std::uint64_t rootCount = 0;
     current += firstContractIndex_;
     while (current)
@@ -301,7 +366,7 @@ inline void bcpp::system::work_contract_group::increment_contract_count
         rootCount = (invocationCounter_[current >>= 1].u64_ += addend);
     }
 
-    if constexpr (allow_sleep)
+    if constexpr (allow_wait)
     {
         if ((((rootCount >> 32) + rootCount) & 0xffffffff) == 1)
         {
@@ -316,16 +381,16 @@ inline void bcpp::system::work_contract_group::increment_contract_count
 
 
 //=============================================================================
-template <bcpp::system::work_contract_group::decrement_preference T_>
+template <bcpp::system::work_contract_group::inclination T_>
 inline auto bcpp::system::work_contract_group::decrement_contract_count
 (
     std::int64_t parent
 ) -> std::pair<std::int64_t, std::uint64_t> 
 {
-    static auto constexpr left_preference = (T_ == decrement_preference::left);
-    static auto constexpr mask = (left_preference) ? left_mask : right_mask;
-    static auto constexpr prefered_addend = (left_preference) ? left_addend : right_addend;
-    static auto constexpr fallback_addend = (left_preference) ? right_addend : left_addend;
+    static auto constexpr left_inclination = (T_ == inclination::left);
+    static auto constexpr mask = (left_inclination) ? left_mask : right_mask;
+    static auto constexpr prefered_addend = (left_inclination) ? left_addend : right_addend;
+    static auto constexpr fallback_addend = (left_inclination) ? right_addend : left_addend;
 
     auto & invocationCounter = invocationCounter_[parent].u64_;
     auto expected = invocationCounter.load();
@@ -337,15 +402,40 @@ inline auto bcpp::system::work_contract_group::decrement_contract_count
 
 
 //=============================================================================
+template <std::uint64_t N>
+inline std::uint64_t bcpp::system::work_contract_group::select_contract_bit
+(
+    std::uint64_t inclinationFlags,
+    std::uint64_t invokedFlags,
+    std::uint64_t selection
+) const
+{
+    if constexpr (N == 0)
+    {
+        return selection;
+    }
+    else
+    {
+        auto constexpr bits_to_consider = (1 << N);
+        std::uint64_t constexpr bit_mask[2]{~((1ull << (bits_to_consider / 2)) - 1), ((1ull << (bits_to_consider / 2)) - 1)};
+
+        auto preferRight = ((inclinationFlags & 1) == 1);
+        if (auto usePreferedSide = ((invokedFlags & bit_mask[preferRight]) != 0); usePreferedSide == preferRight)
+            selection += (bits_to_consider / 2);
+        else
+            invokedFlags >>= (bits_to_consider / 2);
+        return select_contract_bit<N - 1>(inclinationFlags >> 1, invokedFlags & bit_mask[1], selection);
+    }
+}
+
+
+//=============================================================================
 inline void bcpp::system::work_contract_group::execute_next_contract
 (
     std::chrono::nanoseconds duration
 )
 {
-    static auto constexpr right = decrement_preference::right;
-    static auto constexpr left = decrement_preference::left;
-
-    if constexpr (allow_sleep)
+    if constexpr (allow_wait)
     {
         if (activeCount_ == 0)
         {
@@ -353,23 +443,36 @@ inline void bcpp::system::work_contract_group::execute_next_contract
             conditionVariable_.wait_for(uniqueLock, duration, [this](){return ((activeCount_ > 0) || (stopped_));});
         }
     }
+    execute_next_contract();
+}
 
-    std::uint64_t preferenceFlags = preferenceFlags_++;
-    auto [parent, rootCount] = ((preferenceFlags & 1) ? decrement_contract_count<right>(0) : decrement_contract_count<left>(0));
-    if (parent)  
+
+//=============================================================================
+template <std::uint64_t N>
+inline std::uint64_t bcpp::system::work_contract_group::select_contract
+(
+    std::uint64_t & inclinationFlags,
+    std::uint64_t parent
+)
+{
+    static auto constexpr logical_max_n = ((sizeof(inclinationFlags) * 8) - 1);
+    if constexpr (N >= logical_max_n)
     {
-        if constexpr (allow_sleep)
+        return 0;
+    }
+    else
+    {
+        static auto constexpr bit = (1ull << N);
+        static auto constexpr right = inclination::right;
+        static auto constexpr left = inclination::left;
+
+        if (parent >= firstContractIndex_)
         {
-            if (rootCount == 0)
-                --activeCount_;
+            inclinationFlags >>= (N + 1);
+            return parent;
         }
-        while (parent < firstContractIndex_) 
-        {
-            preferenceFlags >>= 1;
-            auto [n, _] = ((preferenceFlags & 1) ? decrement_contract_count<right>(parent) : decrement_contract_count<left>(parent));
-            parent = (parent * 2) + n;
-        }
-        process_contract(parent);
+        auto [n, _] = ((inclinationFlags & bit) ? decrement_contract_count<right>(parent) : decrement_contract_count<left>(parent));
+        return select_contract<N + 1>(inclinationFlags, (parent * 2) + n);
     }
 }
 
@@ -379,24 +482,32 @@ inline void bcpp::system::work_contract_group::execute_next_contract
 (
 )
 {
-    static auto constexpr right = decrement_preference::right;
-    static auto constexpr left = decrement_preference::left;
-
-    std::uint64_t preferenceFlags = preferenceFlags_++;
-    auto [parent, rootCount] = ((preferenceFlags & 1) ? decrement_contract_count<right>(0) : decrement_contract_count<left>(0));
+    static thread_local std::uint64_t tls_inclinationFlags = 0;
+    static auto constexpr right = inclination::right;
+    static auto constexpr left = inclination::left;
+    auto inclinationFlags = tls_inclinationFlags++;
+    auto [parent, rootCount] = ((inclinationFlags & 1) ? decrement_contract_count<right>(0) : decrement_contract_count<left>(0));
     if (parent)  
     {
-        if constexpr (allow_sleep)
+        if constexpr (allow_wait)
         {
-            --activeCount_;
+            if (rootCount == 0)
+                --activeCount_;
         }
-        while (parent < firstContractIndex_) 
+        // select parent node in heap
+        parent = select_contract<1>(inclinationFlags, parent);
+        // select bit which represents the contract to execute
+        auto invokedFlagsIndex = (parent - firstContractIndex_);
+        auto & invokedFlags = invokedFlag_[invokedFlagsIndex];
+        while (true)
         {
-            auto [n, _] = ((preferenceFlags & 1) ? decrement_contract_count<right>(parent) : decrement_contract_count<left>(parent));
-            parent = (parent * 2) + n;
-            preferenceFlags >>= 1;
+            auto expected = invokedFlags.load();
+            auto contractIndex = select_contract_bit<6>(inclinationFlags, expected, 0);
+            auto bit = (0x8000000000000000ull >> contractIndex);
+            expected |= bit;
+            if (invokedFlags.compare_exchange_strong(expected, expected & ~bit))
+                return process_contract((invokedFlagsIndex * 64) + contractIndex);
         }
-        process_contract(parent);
     }
 }
 
@@ -404,10 +515,9 @@ inline void bcpp::system::work_contract_group::execute_next_contract
 //=============================================================================
 inline void bcpp::system::work_contract_group::process_contract
 (
-    std::int64_t parent
+    std::int64_t contractId
 )
 {
-    auto contractId = (parent - firstContractIndex_);
     auto & contract = contracts_[contractId];
     auto & flags = contract.flags_;
     if ((++flags & contract::surrender_flag) != contract::surrender_flag)
@@ -420,11 +530,11 @@ inline void bcpp::system::work_contract_group::process_contract
     {
         if (contract.surrender_)
             std::exchange(contract.surrender_, nullptr)();
-        std::lock_guard lockGuard(mutex_);
-        flags = nextAvail_.load();
-        nextAvail_ = contractId;
         contract.work_ = nullptr;
         surrenderToken_[contractId] = {};
+        contractId += (capacity_ - 1);
+        while (contractId)
+            contractCounter_[contractId >>= 1].u64_ += ((contractId-- & 1ull) ? left_addend : right_addend);
     }
 }
 

@@ -9,6 +9,7 @@
 #include <atomic>
 #include <vector>
 #include <thread>
+#include <cmath>
 
 #include <library/system.h>
 
@@ -100,59 +101,42 @@ void measure_multithreaded_concurrent_contracts
     // there are always some preconfigured number of contracts invoked.
 )
 {
+    // num_worker_threads: how many worker threads to use for test
     static auto const num_worker_threads = std::thread::hardware_concurrency() / 2;
+    // test_duration: how long to run test
     static auto constexpr test_duration = std::chrono::milliseconds(1000);
-    static auto constexpr max_contracts = (1 << 16);
-    static auto const max_concurrent_contracts = num_worker_threads / 2;
-    static std::vector<std::size_t> contractId;
+    // work_contract_capacity: total available work contracts
+    static auto constexpr work_contract_capacity = (1 << 12);
+    // num_contracts_to_use: number of contracts to use in test
+    static auto constexpr num_contracts_to_use = work_contract_capacity / 2;
 
-    static auto once = [&]()
-            {
-                for (auto i = 0; i < max_contracts; ++i)
-                    contractId.push_back(i);
-                for (auto i = 0; i < max_contracts; ++i)
+    // contruct work contract group
+    work_contract_group workContractGroup(work_contract_capacity);
+    std::vector<work_contract> workContracts(num_contracts_to_use);
+
+    // containers for gathering stats during test
+    std::vector<std::int64_t> totalTaskCount(num_contracts_to_use);
+    // create work contracts
+    for (auto i = 0; i < num_contracts_to_use; ++i)
+    {
+        workContracts[i] = workContractGroup.create_contract(
+                [&, index = i]
+                (
+                    // the work to do.  
+                    // each time work contract is executed increase counter and then re-invoke the same contract again.
+                )
                 {
-                    std::uint64_t j = ((rand() * rand()) % contractId.size());
-                    while (j == i)
-                        j = (((j * rand()) + 1) % contractId.size());
-                    std::swap(contractId[i], contractId[j]);
-                }
-                return true;
-            }();
-
-    // enable each contract to invoke the next random contract upon its own completion.
-    work_contract_group workContractGroup(max_contracts);
-    std::atomic<std::size_t> totalTaskCount[max_contracts];
-    thread_local std::size_t taskCount;
-    std::vector<work_contract> workContracts(max_contracts);
-
-    for (auto i = 0; i < max_contracts; ++i)
-        workContracts[i] = workContractGroup.create_contract([&, index = i]() mutable
-                {
-                //    std::this_thread::sleep_for(std::chrono::microseconds(1));
-                    ++taskCount;
                     totalTaskCount[index]++;
                     workContracts[index].invoke();
-                    return;
-
-                    if (index & 1)
-                    {
-                        if (totalTaskCount[index] & 1)
-                            workContracts[index].invoke();
-                    }
-                    else
-                    {
-                        if ((totalTaskCount[index] & 0x07) == 0x07)
-                            workContracts[index + 1].invoke();
-                        workContracts[index].invoke();
-                    }
                 });
+    }
 
-    // invoke the correct number of concurrent contracts to start things off
-    for (auto i = 0; i < max_contracts; ++i)
-        workContracts[i].invoke();
+    // invoke each of the contracts to start things off
+    for (auto & workContract : workContracts)
+        workContract.invoke();
 
-    // create a worker thread pool and direct the threads to service the work contract group - also very simple
+    // create a worker thread pool and direct the threads to service the work contract group
+    // ensure that each thread is on its own cpu for the sake of this test
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(num_worker_threads);
     for (auto && [index, thread] : ranges::v3::views::enumerate(threads))
     {
@@ -162,8 +146,8 @@ void measure_multithreaded_concurrent_contracts
                     auto const & stopToken
                 ) mutable
                 {
-                    while (!stopToken.stop_requested()) 
-                        workContractGroup.execute_next_contract(std::chrono::seconds(1)); 
+                    while (!stopToken.stop_requested())
+                        workContractGroup.execute_next_contract(std::chrono::seconds(1));
                 };
     }
     bcpp::system::thread_pool threadPool({.threads_ = threads});
@@ -177,19 +161,25 @@ void measure_multithreaded_concurrent_contracts
     // wait for all threads to exit
     threadPool.wait_stop_complete();
     workContractGroup.stop();
+
     // test completed
+    // gather timing
     auto stopTime = std::chrono::system_clock::now();
     auto elapsedTime = (stopTime - startTime);
     auto test_duration_in_sec = (double)std::chrono::duration_cast<std::chrono::nanoseconds>(elapsedTime).count() / std::nano::den;
-
-    auto n = 0;    
-    for (auto i = 0; i < max_contracts; ++i)
-    {
-    //    std::cout << "contract " << i << " executed " << totalTaskCount[i] << " times\n";
+    // calculate std deviation etc
+    std::size_t n = 0;    
+    for (auto i = 0; i < num_contracts_to_use; ++i)
         n += totalTaskCount[i];
-    }
+    long double m = ((long double)n / num_contracts_to_use);
+    long double k = 0;
+    for (auto i = 0; i < num_contracts_to_use; ++i)
+        k += ((totalTaskCount[i] - m) * (totalTaskCount[i] - m));
+    k /= (num_contracts_to_use - 1);
+    // report results
     std::cout << "Total tasks = " << n << ", tasks per sec = " << (int)(n / test_duration_in_sec) << 
-            ", tasks per thread per sec = " << (int)((n / test_duration_in_sec) / num_worker_threads) << std::endl;
+            ", tasks per thread per sec = " << (int)((n / test_duration_in_sec) / num_worker_threads) << 
+            ", mean = " << m << ", std deviation = " << std::sqrt(k) << std::endl;
 
 
 }
