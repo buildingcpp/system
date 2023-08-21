@@ -96,7 +96,7 @@ void basic_example
 
 
 //=============================================================================
-void measure_multithreaded_concurrent_contracts
+auto measure_multithreaded_concurrent_contracts
 (
     // measure performance where max number of contracts is large and where
     // there are always some preconfigured number of contracts invoked.
@@ -106,9 +106,9 @@ void measure_multithreaded_concurrent_contracts
     // num_worker_threads: how many worker threads to use for test
     //static auto const num_worker_threads = 10;//std::thread::hardware_concurrency() / 2;
     // test_duration: how long to run test
-    static auto constexpr test_duration = std::chrono::milliseconds(1000);
+    static auto constexpr test_duration = std::chrono::milliseconds(10000);
     // work_contract_capacity: total available work contracts
-    static auto constexpr work_contract_capacity = (1 << 10);
+    static auto constexpr work_contract_capacity = (1 << 9);
     // num_contracts_to_use: number of contracts to use in test
     static auto constexpr num_contracts_to_use = work_contract_capacity;
 
@@ -122,10 +122,10 @@ void measure_multithreaded_concurrent_contracts
 
     auto work2 = []()
     {
-    auto t = 0;
-    for (auto i = 0; i < (1 << 8); ++i)
-        t += std::to_string(i).size();
-    return t;
+        auto t = 0;
+        for (auto i = 0; i < (1 << 6); ++i)
+            t += std::to_string(i).size();
+        return t;
     };
 
     // create work contracts
@@ -192,11 +192,11 @@ void measure_multithreaded_concurrent_contracts
     k /= (num_contracts_to_use - 1);
     auto sd = std::sqrt(k);
     // report results
-    std::cout << "Total tasks = " << n << ", tasks per sec = " << (int)(n / test_duration_in_sec) << 
-            ", tasks per thread per sec = " << (int)((n / test_duration_in_sec) / num_worker_threads) << 
-            ", mean = " << m << ", std dev = " << sd << ", cv = " << std::fixed << std::setprecision(3) << (sd / m) << std::endl;
+    std::cout << "Threads = " << num_worker_threads << ", total tasks = " << n << ", tasks per sec = " << (int)(n / test_duration_in_sec) << 
+            " , tasks per thread per sec = " << (int)((n / test_duration_in_sec) / num_worker_threads) << 
+            " , mean = " << m << " , std dev = " << sd << " , cv = " << std::fixed << std::setprecision(3) << (sd / m) << std::endl;
 
-    std::cout << useless << "\n";
+    return useless;
 }
 
 
@@ -212,8 +212,9 @@ int main
   //  work_contract_after_group_destroyed_test();
 
     static auto constexpr num_loops = 10;
+    auto n = 0;
     for (auto i = 0; i < num_loops; ++i)
-        measure_multithreaded_concurrent_contracts(i + 1);
+        n += measure_multithreaded_concurrent_contracts(i + 1);
 
-    return 0;
+    return n;
 }

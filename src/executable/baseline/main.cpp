@@ -13,14 +13,16 @@
 #include <iomanip>
 #include <library/system.h>
 
+#include <concurrentqueue.h>
+
 
 //=============================================================================
-auto work_function
+std::int32_t work_function
 (
 )
 {
     auto t = 0;
-    for (auto i = 0; i < (1 << 8); ++i)
+    for (auto i = 0; i < (1 << 6); ++i)
         t += std::to_string(i).size();
     return t;
 };
@@ -32,7 +34,9 @@ auto run_baseline
     std::size_t num_worker_threads
 )
 {
-    static auto constexpr test_duration = std::chrono::milliseconds(5000);
+    moodycamel::ConcurrentQueue<std::int32_t(*)()> queue;
+
+    static auto constexpr test_duration = std::chrono::milliseconds(10000);
 
     std::vector<std::int64_t> totalTaskCount(num_worker_threads);
     auto useless = 0;
@@ -48,12 +52,21 @@ auto run_baseline
                 {
                     while (!stopToken.stop_requested())
                     {
-                        useless += work_function();
-                        totalTaskCount[index]++;
+                        std::int32_t (*func)();
+                        if (queue.try_dequeue(func))
+                        {
+                            useless += func();
+                            totalTaskCount[index]++;
+                            queue.enqueue(func);
+                        }
                     }
                 };
     }
     bcpp::system::thread_pool threadPool({.threads_ = threads});
+
+    for (auto i = 0; i < 0x200; ++i)
+        while (!queue.enqueue(work_function))
+            ;
 
     // start test
     auto startTime = std::chrono::system_clock::now();
@@ -80,9 +93,9 @@ auto run_baseline
     k /= (num_worker_threads - 1);
     auto sd = std::sqrt(k);
     // report results
-    std::cout << "Total tasks = " << n << ", tasks per sec = " << (int)(n / test_duration_in_sec) << 
-            ", tasks per thread per sec = " << (int)((n / test_duration_in_sec) / num_worker_threads) << 
-            ", mean = " << m << ", std dev = " << sd << ", cv = " << std::fixed << std::setprecision(3) << (sd / m) << std::endl;
+    std::cout << "Threads = " << num_worker_threads << ", total tasks = " << n << " , tasks per sec = " << (int)(n / test_duration_in_sec) << 
+            " , tasks per thread per sec = " << (int)((n / test_duration_in_sec) / num_worker_threads) << 
+            " , mean = " << m << " , std dev = " << sd << " , cv = " << std::fixed << std::setprecision(3) << (sd / m) << std::endl;
     return useless;
 }
 

@@ -14,12 +14,11 @@ namespace bcpp::system
 
     class work_contract;
 
-
     class work_contract_group
     {
     public:
 
-        // allow_wait
+        // allow_blocking
         //
         // TRUE: uses condition_variable to allow threads to sleep while waiting for contracts to execute.
         // This mode is better for standard applications.
@@ -27,7 +26,7 @@ namespace bcpp::system
         // FALSE: threads will return immediately if there are no contracts to execute.  
         // This mode is for spinning and is useful for low latency environments.
         
-        static auto constexpr allow_wait = false;//true;
+        static auto constexpr allow_blocking = false;//true;
 
         class surrender_token;
 
@@ -247,7 +246,7 @@ inline void bcpp::system::work_contract_group::stop
         for (auto & surrenderToken : surrenderToken_)
             if ((bool)surrenderToken)
                 surrenderToken->orphan();
-        if constexpr (allow_wait)
+        if constexpr (allow_blocking)
         {
             std::unique_lock uniqueLock(mutex_);
             conditionVariable_.notify_all();
@@ -413,7 +412,7 @@ inline void bcpp::system::work_contract_group::increment_contract_count
         rootCount = (invocationCounter_[current >>= 1].u64_ += addend);
     }
 
-    if constexpr (allow_wait)
+    if constexpr (allow_blocking)
     {
         if ((((rootCount >> 32) + rootCount) & 0xffffffff) == 1)
         {
@@ -482,7 +481,7 @@ inline void bcpp::system::work_contract_group::execute_next_contract
     std::chrono::nanoseconds duration
 )
 {
-    if constexpr (allow_wait)
+    if constexpr (allow_blocking)
     {
         if (activeCount_ == 0)
         {
@@ -536,7 +535,7 @@ inline void bcpp::system::work_contract_group::execute_next_contract
     auto [parent, rootCount] = ((inclinationFlags & 1) ? decrement_contract_count<right>(0) : decrement_contract_count<left>(0));
     if (parent)  
     {
-        if constexpr (allow_wait)
+        if constexpr (allow_blocking)
         {
             if (rootCount == 0)
                 --activeCount_;
