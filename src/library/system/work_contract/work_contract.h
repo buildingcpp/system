@@ -149,8 +149,13 @@ inline bool bcpp::system::work_contract::surrender
 (
 )
 {
-    owner_ = {};
-    return (surrenderToken_) ? surrenderToken_->invoke(*this) : false;
+    if (auto surrenderToken = std::exchange(surrenderToken_, nullptr); surrenderToken)
+    {
+        surrenderToken->invoke(*this);
+        return true;
+    }
+    return false;
+   // return (surrenderToken_) ? surrenderToken_->invoke(*this) : false;
 }
 
 
@@ -159,7 +164,7 @@ inline bool bcpp::system::work_contract::is_valid
 (
 ) const
 {
-    return (owner_ != nullptr);
+    return ((bool)surrenderToken_);
 }
 
 
