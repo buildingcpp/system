@@ -22,7 +22,7 @@ std::int32_t work_function
 )
 {
     auto t = 0;
-    for (auto i = 0; i < (1 << 6); ++i)
+    for (auto i = 0; i < (1 << 8); ++i)
         t += std::to_string(i).size();
     return t;
 };
@@ -34,17 +34,18 @@ auto run_baseline
     std::size_t num_worker_threads
 )
 {
-    moodycamel::ConcurrentQueue<std::int32_t(*)()> queue;
-
     static auto constexpr test_duration = std::chrono::milliseconds(10000);
+    static auto constexpr num_tasks = (1 << 8);
+    using work_pair = std::pair<std::int32_t, std::int32_t(*)()>;
+    moodycamel::ConcurrentQueue<work_pair> queue(num_tasks);
 
-    std::vector<std::int64_t> totalTaskCount(num_worker_threads);
+    std::vector<std::int64_t> totalTaskCount(num_tasks);
     auto useless = 0;
 
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(num_worker_threads);
     for (auto && [index, thread] : ranges::v3::views::enumerate(threads))
     {
-        thread.cpuId_ = index;
+        thread.cpuId_ = index * 2;
         thread.function_ = [&, index]
                 (
                     auto const & stopToken
@@ -52,20 +53,20 @@ auto run_baseline
                 {
                     while (!stopToken.stop_requested())
                     {
-                        std::int32_t (*func)();
-                        if (queue.try_dequeue(func))
+                        work_pair p;
+                        if (queue.try_dequeue(p))
                         {
-                            useless += func();
-                            totalTaskCount[index]++;
-                            queue.enqueue(func);
+                            useless += p.second();
+                            totalTaskCount[p.first]++;
+                            queue.enqueue(p);
                         }
                     }
                 };
     }
     bcpp::system::thread_pool threadPool({.threads_ = threads});
 
-    for (auto i = 0; i < 0x200; ++i)
-        while (!queue.enqueue(work_function))
+    for (auto i = 0; i < num_tasks; ++i)
+        while (!queue.enqueue({i, work_function}))
             ;
 
     // start test
@@ -84,13 +85,13 @@ auto run_baseline
     auto test_duration_in_sec = (double)std::chrono::duration_cast<std::chrono::nanoseconds>(elapsedTime).count() / std::nano::den;
     // calculate std deviation etc
     std::size_t n = 0;    
-    for (auto i = 0; i < num_worker_threads; ++i)
+    for (auto i = 0; i < num_tasks; ++i)
         n += totalTaskCount[i];
-    long double m = ((long double)n / num_worker_threads);
+    long double m = ((long double)n / num_tasks);
     long double k = 0;
-    for (auto i = 0; i < num_worker_threads; ++i)
+    for (auto i = 0; i < num_tasks; ++i)
         k += ((totalTaskCount[i] - m) * (totalTaskCount[i] - m));
-    k /= (num_worker_threads - 1);
+    k /= (num_tasks - 1);
     auto sd = std::sqrt(k);
     // report results
     std::cout << "Threads = " << num_worker_threads << ", total tasks = " << n << " , tasks per sec = " << (int)(n / test_duration_in_sec) << 

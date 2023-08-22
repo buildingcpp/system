@@ -406,6 +406,7 @@ inline void bcpp::system::work_contract_group::increment_contract_count
 
     std::uint64_t rootCount = 0;
     current += firstContractIndex_;
+
     while (current)
     {
         auto addend = ((current-- & 1ull) ? left_addend : right_addend);
@@ -423,27 +424,6 @@ inline void bcpp::system::work_contract_group::increment_contract_count
             }
         }
     }
-}
-
-
-//=============================================================================
-template <bcpp::system::work_contract_group::inclination T_>
-inline auto bcpp::system::work_contract_group::decrement_contract_count
-(
-    std::int64_t parent
-) -> std::pair<std::int64_t, std::uint64_t> 
-{
-    static auto constexpr left_inclination = (T_ == inclination::left);
-    static auto constexpr mask = (left_inclination) ? left_mask : right_mask;
-    static auto constexpr prefered_addend = (left_inclination) ? left_addend : right_addend;
-    static auto constexpr fallback_addend = (left_inclination) ? right_addend : left_addend;
-
-    auto & invocationCounter = invocationCounter_[parent].u64_;
-    auto expected = invocationCounter.load();
-    auto addend = (expected & mask) ? prefered_addend : fallback_addend;
-    while ((expected != 0) && (!invocationCounter.compare_exchange_strong(expected, expected - addend)))
-        addend = (expected & mask) ? prefered_addend : fallback_addend;
-    return {expected ? (1 + (addend > left_mask)) : 0, expected - addend};
 }
 
 
@@ -494,6 +474,27 @@ inline void bcpp::system::work_contract_group::execute_next_contract
 
 
 //=============================================================================
+template <bcpp::system::work_contract_group::inclination T_>
+inline auto bcpp::system::work_contract_group::decrement_contract_count
+(
+    std::int64_t parent
+) -> std::pair<std::int64_t, std::uint64_t> 
+{
+    static auto constexpr left_inclination = (T_ == inclination::left);
+    static auto constexpr mask = (left_inclination) ? left_mask : right_mask;
+    static auto constexpr prefered_addend = (left_inclination) ? left_addend : right_addend;
+    static auto constexpr fallback_addend = (left_inclination) ? right_addend : left_addend;
+
+    auto & invocationCounter = invocationCounter_[parent].u64_;
+    auto expected = invocationCounter.load();
+    auto addend = (expected & mask) ? prefered_addend : fallback_addend;
+    while ((expected != 0) && (!invocationCounter.compare_exchange_strong(expected, expected - addend)))
+        addend = (expected & mask) ? prefered_addend : fallback_addend;
+    return {expected ? (1 + (addend > left_mask)) : 0, expected - addend};
+}
+
+
+//=============================================================================
 template <std::uint64_t N>
 inline std::uint64_t bcpp::system::work_contract_group::select_contract
 (
@@ -502,11 +503,7 @@ inline std::uint64_t bcpp::system::work_contract_group::select_contract
 )
 {
     static auto constexpr logical_max_n = ((sizeof(inclinationFlags) * 8) - 1);
-    if constexpr (N >= logical_max_n)
-    {
-        return 0;
-    }
-    else
+    if constexpr (N < logical_max_n)
     {
         static auto constexpr bit = (1ull << N);
         static auto constexpr right = inclination::right;
@@ -520,6 +517,7 @@ inline std::uint64_t bcpp::system::work_contract_group::select_contract
         auto [n, _] = ((inclinationFlags & bit) ? decrement_contract_count<right>(parent) : decrement_contract_count<left>(parent));
         return select_contract<N + 1>(inclinationFlags, (parent * 2) + n);
     }
+    return 0;
 }
 
 
@@ -541,7 +539,7 @@ inline void bcpp::system::work_contract_group::execute_next_contract
                 --activeCount_;
         }
         // select parent node in heap
-        parent = select_contract<1>(inclinationFlags, parent);
+        parent = (parent < firstContractIndex_) ? select_contract<1>(inclinationFlags, parent) : parent;
         // select bit which represents the contract to execute
         auto invokedFlagsIndex = (parent - firstContractIndex_);
         auto & invokedFlags = invokedFlag_[invokedFlagsIndex];

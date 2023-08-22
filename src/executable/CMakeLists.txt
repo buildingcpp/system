@@ -1,3 +1,2 @@
-add_subdirectory(work_contract_demo)
-add_subdirectory(work_contract_demo_2)
-add_subdirectory(baseline)
+add_subdirectory(work_contract_test)
+add_subdirectory(mpmc_test)

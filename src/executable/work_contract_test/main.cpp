@@ -96,6 +96,18 @@ void basic_example
 
 
 //=============================================================================
+std::int32_t work_function
+(
+)
+{
+    auto t = 0;
+    for (auto i = 0; i < (1 << 8); ++i)
+        t += std::to_string(i).size();
+    return t;
+};
+
+
+//=============================================================================
 auto measure_multithreaded_concurrent_contracts
 (
     // measure performance where max number of contracts is large and where
@@ -108,7 +120,7 @@ auto measure_multithreaded_concurrent_contracts
     // test_duration: how long to run test
     static auto constexpr test_duration = std::chrono::milliseconds(10000);
     // work_contract_capacity: total available work contracts
-    static auto constexpr work_contract_capacity = (1 << 9);
+    static auto constexpr work_contract_capacity = (1 << 8);
     // num_contracts_to_use: number of contracts to use in test
     static auto constexpr num_contracts_to_use = work_contract_capacity;
 
@@ -120,14 +132,6 @@ auto measure_multithreaded_concurrent_contracts
     std::vector<std::int64_t> totalTaskCount(num_contracts_to_use);
     auto useless = 0;
 
-    auto work2 = []()
-    {
-        auto t = 0;
-        for (auto i = 0; i < (1 << 6); ++i)
-            t += std::to_string(i).size();
-        return t;
-    };
-
     // create work contracts
     for (auto i = 0; i < num_contracts_to_use; ++i)
     {
@@ -138,7 +142,7 @@ auto measure_multithreaded_concurrent_contracts
                     // each time work contract is executed increase counter and then re-invoke the same contract again.
                 )
                 {
-                    useless += work2();
+                    useless += work_function();
                     totalTaskCount[index]++;
                     workContracts[index].invoke();
                 });
@@ -153,7 +157,7 @@ auto measure_multithreaded_concurrent_contracts
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(num_worker_threads);
     for (auto && [index, thread] : ranges::v3::views::enumerate(threads))
     {
-        thread.cpuId_ = index;
+        thread.cpuId_ = index * 2;
         thread.function_ = [&]
                 (
                     auto const & stopToken
@@ -192,7 +196,7 @@ auto measure_multithreaded_concurrent_contracts
     k /= (num_contracts_to_use - 1);
     auto sd = std::sqrt(k);
     // report results
-    std::cout << "Threads = " << num_worker_threads << ", total tasks = " << n << ", tasks per sec = " << (int)(n / test_duration_in_sec) << 
+    std::cout << "Threads = " << num_worker_threads << " , total tasks = " << n << " , tasks per sec = " << (int)(n / test_duration_in_sec) << 
             " , tasks per thread per sec = " << (int)((n / test_duration_in_sec) / num_worker_threads) << 
             " , mean = " << m << " , std dev = " << sd << " , cv = " << std::fixed << std::setprecision(3) << (sd / m) << std::endl;
 
