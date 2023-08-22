@@ -29,7 +29,7 @@ std::int32_t work_function
 
 
 //=============================================================================
-auto run_baseline
+auto mpmc_test
 (
     std::size_t num_worker_threads
 )
@@ -110,6 +110,6 @@ int main
 {
     static auto constexpr num_loops = 10;
     for (auto i = 0; i < num_loops; ++i)
-        run_baseline(i + 1);
+        mpmc_test(i + 1);
     return 0;
 }

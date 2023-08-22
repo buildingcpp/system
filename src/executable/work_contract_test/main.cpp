@@ -108,15 +108,13 @@ std::int32_t work_function
 
 
 //=============================================================================
-auto measure_multithreaded_concurrent_contracts
+auto work_contract_test
 (
     // measure performance where max number of contracts is large and where
     // there are always some preconfigured number of contracts invoked.
     std::size_t num_worker_threads
 )
 {
-    // num_worker_threads: how many worker threads to use for test
-    //static auto const num_worker_threads = 10;//std::thread::hardware_concurrency() / 2;
     // test_duration: how long to run test
     static auto constexpr test_duration = std::chrono::milliseconds(10000);
     // work_contract_capacity: total available work contracts
@@ -218,7 +216,7 @@ int main
     static auto constexpr num_loops = 10;
     auto n = 0;
     for (auto i = 0; i < num_loops; ++i)
-        n += measure_multithreaded_concurrent_contracts(i + 1);
+        n += work_contract_test(i + 1);
 
     return n;
 }
