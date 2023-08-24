@@ -27,13 +27,13 @@ namespace bcpp::system
         // FALSE: threads will return immediately if there are no contracts to execute.  
         // This mode is for spinning and is useful for low latency environments.
         
-        static auto constexpr allow_blocking = false;//true;
+        static auto constexpr allow_blocking = false;
 
         class surrender_token;
 
         work_contract_group
         (
-            std::int64_t
+            std::int64_t = 1 << 8
         );
 
         ~work_contract_group();
@@ -49,7 +49,10 @@ namespace bcpp::system
             std::function<void()>
         );
 
-        void execute_next_contract();
+        void execute_next_contract
+        (
+            std::uint64_t
+        );
 
         void execute_next_contract
         (
@@ -57,8 +60,6 @@ namespace bcpp::system
         );
 
         std::size_t get_capacity() const;
-
-        std::size_t get_active_contract_count() const;
 
         void stop();
 
@@ -390,15 +391,6 @@ inline std::size_t bcpp::system::work_contract_group::get_available_contract
 
 
 //=============================================================================
-inline std::size_t bcpp::system::work_contract_group::get_active_contract_count
-(
-) const
-{
-    return invocationCounter_[0].get_count();
-}
-
-
-//=============================================================================
 inline void bcpp::system::work_contract_group::increment_contract_count
 (
     std::int64_t current
@@ -473,7 +465,7 @@ inline void bcpp::system::work_contract_group::execute_next_contract
             conditionVariable_.wait_for(uniqueLock, duration, [this](){return ((activeCount_ > 0) || (stopped_));});
         }
     }
-    execute_next_contract();
+    execute_next_contract(0);
 }
 
 
@@ -529,16 +521,18 @@ inline std::uint64_t bcpp::system::work_contract_group::select_contract
 //=============================================================================
 inline void bcpp::system::work_contract_group::execute_next_contract
 (
+    std::uint64_t inclinationFlags
 )
 {
-    static thread_local std::uint64_t tls_inclinationFlags = 0;
     static auto constexpr right = inclination::right;
     static auto constexpr left = inclination::left;
 
-    auto inclinationFlags = tls_inclinationFlags++;
+   // auto inclinationFlags = tls_inclinationFlags;
     auto [parent, rootCount] = ((inclinationFlags & 1) ? decrement_contract_count<right>(0) : decrement_contract_count<left>(0));
     if (parent)  
     {
+
+      //  tls_inclinationFlags++;
         if constexpr (allow_blocking)
         {
             if (rootCount == 0)
@@ -582,47 +576,62 @@ inline void bcpp::system::work_contract_group::process_contract
     }
 }
 
+#include <iostream>
 
-//=============================================================================
-inline std::size_t bcpp::system::work_contract_group::get_capacity
-(
-) const
+namespace bcpp::system
 {
-    return contracts_.size();
-}
-
-
-//=============================================================================
-inline bcpp::system::work_contract_group::surrender_token::surrender_token
-(
-    work_contract_group * workContractGroup
-):
-    workContractGroup_(workContractGroup)
+class work_contract_group_4
 {
-}
+public:
+
+        static auto constexpr fold = 16;
+        static auto constexpr fold_mask = fold - 1;
+
+        work_contract_group_4(std::size_t capacity)
+        {
+        }
+
+        work_contract create_contract
+        (
+            std::function<void()> f
+        )
+        {
+            return create_contract(f, nullptr);
+        }
+
+        work_contract create_contract
+        (
+            std::function<void()> f,
+            std::function<void()> s
+        )
+        {
+            for (auto i = 0; i < fold; ++i)
+                if (auto w = workContractGroup_[counter_++ & fold_mask].create_contract(f, s); w) return w;
+            return {};
+        }
+
+        void execute_next_contract()
+        {
+            static thread_local std::size_t counter = 0;
+            static thread_local std::uint64_t tls_inclinationFlags[fold];
+            workContractGroup_[counter & fold_mask].execute_next_contract(tls_inclinationFlags[counter & fold_mask]++);
+            ++counter;
+        }
+
+        std::size_t get_capacity() const;
+
+        void stop()
+        {
+            for (auto & w : workContractGroup_)
+                w.stop();
+        }
+
+private:
+
+    std::atomic<std::uint64_t> counter_;
+
+    std::array<work_contract_group, fold> workContractGroup_;
+};
 
 
-//=============================================================================
-inline bool bcpp::system::work_contract_group::surrender_token::invoke
-(
-    work_contract const & workContract
-)
-{
-    std::lock_guard lockGuard(mutex_);
-    if (auto workContractGroup = std::exchange(workContractGroup_, nullptr); workContractGroup != nullptr)
-    {
-        workContractGroup->surrender(workContract);
-        return true;
-    }
-    return false;
-}
-
-
-//=============================================================================
-inline void bcpp::system::work_contract_group::surrender_token::orphan
-(
-)
-{
-    std::lock_guard lockGuard(mutex_);
-    workContractGroup_ = nullptr;
-}
+} // namespace

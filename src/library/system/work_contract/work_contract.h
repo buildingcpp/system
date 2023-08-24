@@ -155,7 +155,6 @@ inline bool bcpp::system::work_contract::surrender
         return true;
     }
     return false;
-   // return (surrenderToken_) ? surrenderToken_->invoke(*this) : false;
 }
 
 

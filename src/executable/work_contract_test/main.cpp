@@ -17,7 +17,7 @@
 
 using namespace bcpp::system;
 
-
+/*
 //=============================================================================
 void bare_minimum_example
 (
@@ -93,7 +93,7 @@ void basic_example
     while (!surrendered)
         ;
 }
-
+*/
 
 //=============================================================================
 std::int32_t work_function
@@ -123,7 +123,7 @@ auto work_contract_test
     static auto constexpr num_contracts_to_use = work_contract_capacity;
 
     // contruct work contract group
-    work_contract_group workContractGroup(work_contract_capacity);
+    work_contract_group_4 workContractGroup(work_contract_capacity);
     std::vector<work_contract> workContracts(num_contracts_to_use);
 
     // containers for gathering stats during test
