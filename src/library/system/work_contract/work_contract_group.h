@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <atomic>
 #include <mutex>
+#include <condition_variable>
 #include <functional>
 
 
@@ -109,6 +110,8 @@ namespace bcpp::system
 
         std::size_t process_contract();
 
+        void process_surrender(std::int64_t);
+
         void process_contract(std::int64_t);
 
         void increment_contract_count(std::int64_t);
@@ -197,6 +200,7 @@ namespace bcpp::system
 
 #include "./work_contract.h"
 
+
 //=============================================================================
 inline bcpp::system::work_contract_group::work_contract_group
 (
@@ -204,8 +208,8 @@ inline bcpp::system::work_contract_group::work_contract_group
 ):
     capacity_((capacity < 256) ? 256 : ((capacity + 63) / 64) * 64),
     invocationCounter_(capacity_ / 64),
-    availableCounter_(capacity_ / 64),
     invokedFlag_(capacity_ / 64),
+    availableCounter_(capacity_ / 64),
     availableFlag_(capacity_ / 64),
     contracts_(capacity_),
     surrenderToken_(capacity_)
@@ -333,16 +337,15 @@ inline std::uint64_t bcpp::system::work_contract_group::get_available_contract_b
     }
     else
     {
-        auto constexpr bits_to_consider = (1 << N);
-        std::uint64_t constexpr bit_mask[2]{~((1ull << (bits_to_consider / 2)) - 1), ((1ull << (bits_to_consider / 2)) - 1)};
+        auto constexpr bits_to_consider = (1 << N) / 2;
+        static auto constexpr left_bit_mask = ~((1ull << bits_to_consider) - 1);
+        static auto constexpr right_bit_mask = ~left_bit_mask;
 
-        auto leftCount = std::popcount(invokedFlags & bit_mask[0]);
-        auto rightCount = std::popcount(invokedFlags & bit_mask[1]);
+        auto leftCount = std::popcount(invokedFlags & left_bit_mask);
+        auto rightCount = std::popcount(invokedFlags & right_bit_mask);
         if (leftCount < rightCount)
-            selection += (bits_to_consider / 2);
-        else
-            invokedFlags >>= (bits_to_consider / 2);
-        return get_available_contract_bit<N - 1>(invokedFlags & bit_mask[1], selection);
+            return get_available_contract_bit<N - 1>(invokedFlags & right_bit_mask, selection + bits_to_consider);
+        return get_available_contract_bit<N - 1>((invokedFlags >> bits_to_consider) & right_bit_mask, selection);
     }
 }
 
@@ -401,20 +404,16 @@ inline void bcpp::system::work_contract_group::increment_contract_count
     std::int64_t current
 )
 {
-    invokedFlag_[current / 64] |= ((0x8000000000000000ull) >> (current & 63));
-    current /= 64;
-
-    std::uint64_t rootCount = 0;
+    invokedFlag_[current >> 6] |= ((0x8000000000000000ull) >> (current & 0x3f));
+    current >>= 6;
     current += firstContractIndex_;
-
-    while (current)
-    {
-        auto addend = ((current-- & 1ull) ? left_addend : right_addend);
-        rootCount = (invocationCounter_[current >>= 1].u64_ += addend);
-    }
 
     if constexpr (allow_blocking)
     {
+        std::uint64_t rootCount = 0;
+
+        while (current)
+            rootCount = (invocationCounter_[current >>= 1].u64_ += ((current-- & 1ull) ? left_addend : right_addend));
         if ((((rootCount >> 32) + rootCount) & 0xffffffff) == 1)
         {
             if (++activeCount_ == 1)
@@ -423,6 +422,11 @@ inline void bcpp::system::work_contract_group::increment_contract_count
                 conditionVariable_.notify_all();
             }
         }
+    }
+    else
+    {
+        while (current)
+            invocationCounter_[current >>= 1].u64_ += ((current-- & 1ull) ? left_addend : right_addend);
     }
 }
 
@@ -442,14 +446,14 @@ inline std::uint64_t bcpp::system::work_contract_group::select_invoked_contract_
     }
     else
     {
-        auto constexpr bits_to_consider = (1 << N);
-        std::uint64_t constexpr bit_mask[2]{~((1ull << (bits_to_consider / 2)) - 1), ((1ull << (bits_to_consider / 2)) - 1)};
+        auto constexpr bits_to_consider = (1 << N) / 2;
+        std::uint64_t constexpr bit_mask[2]{~((1ull << bits_to_consider) - 1), ((1ull << bits_to_consider) - 1)};
 
         auto preferRight = ((inclinationFlags & 1) == 1);
         if (auto usePreferedSide = ((invokedFlags & bit_mask[preferRight]) != 0); usePreferedSide == preferRight)
-            selection += (bits_to_consider / 2);
+            selection += bits_to_consider;
         else
-            invokedFlags >>= (bits_to_consider / 2);
+            invokedFlags >>= bits_to_consider;
         return select_invoked_contract_bit<N - 1>(inclinationFlags >> 1, invokedFlags & bit_mask[1], selection);
     }
 }
@@ -474,13 +478,13 @@ inline void bcpp::system::work_contract_group::execute_next_contract
 
 
 //=============================================================================
-template <bcpp::system::work_contract_group::inclination T_>
+template <bcpp::system::work_contract_group::inclination T>
 inline auto bcpp::system::work_contract_group::decrement_contract_count
 (
     std::int64_t parent
 ) -> std::pair<std::int64_t, std::uint64_t> 
 {
-    static auto constexpr left_inclination = (T_ == inclination::left);
+    static auto constexpr left_inclination = (T == inclination::left);
     static auto constexpr mask = (left_inclination) ? left_mask : right_mask;
     static auto constexpr prefered_addend = (left_inclination) ? left_addend : right_addend;
     static auto constexpr fallback_addend = (left_inclination) ? right_addend : left_addend;
@@ -491,6 +495,7 @@ inline auto bcpp::system::work_contract_group::decrement_contract_count
     while ((expected != 0) && (!invocationCounter.compare_exchange_strong(expected, expected - addend)))
         addend = (expected & mask) ? prefered_addend : fallback_addend;
     return {expected ? (1 + (addend > left_mask)) : 0, expected - addend};
+    
 }
 
 
@@ -529,6 +534,7 @@ inline void bcpp::system::work_contract_group::execute_next_contract
     static thread_local std::uint64_t tls_inclinationFlags = 0;
     static auto constexpr right = inclination::right;
     static auto constexpr left = inclination::left;
+
     auto inclinationFlags = tls_inclinationFlags++;
     auto [parent, rootCount] = ((inclinationFlags & 1) ? decrement_contract_count<right>(0) : decrement_contract_count<left>(0));
     if (parent)  
@@ -572,19 +578,7 @@ inline void bcpp::system::work_contract_group::process_contract
     }
     else
     {
-        if (contract.surrender_)
-            std::exchange(contract.surrender_, nullptr)();
-        contract.work_ = nullptr;
-        surrenderToken_[contractId] = {};
-
-        availableFlag_[contractId / 64] |= ((0x8000000000000000ull) >> (contractId & 63));
-        contractId /= 64;
-        contractId += firstContractIndex_;
-        while (contractId)
-        {
-            auto addend = ((contractId-- & 1ull) ? left_addend : right_addend);
-            availableCounter_[contractId >>= 1].u64_ += addend;
-        }
+        process_surrender(contractId);
     }
 }
 

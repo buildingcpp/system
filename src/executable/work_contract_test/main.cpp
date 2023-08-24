@@ -118,7 +118,7 @@ auto work_contract_test
     // test_duration: how long to run test
     static auto constexpr test_duration = std::chrono::milliseconds(10000);
     // work_contract_capacity: total available work contracts
-    static auto constexpr work_contract_capacity = (1 << 8);
+    static auto constexpr work_contract_capacity = (1 << 10);
     // num_contracts_to_use: number of contracts to use in test
     static auto constexpr num_contracts_to_use = work_contract_capacity;
 

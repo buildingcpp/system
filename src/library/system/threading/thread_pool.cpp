@@ -3,6 +3,40 @@
 #include <library/system.h>
 
 
+namespace 
+{
+    struct thread_counter
+    {
+        thread_counter
+        (
+            std::shared_ptr<std::atomic<std::size_t>> counter,
+            std::shared_ptr<std::mutex> mutex,
+            std::shared_ptr<std::condition_variable> conditionVariable
+        ):
+            counter_(counter), 
+            mutex_(mutex), 
+            conditionVariable_(conditionVariable)
+        {
+            ++(*counter_);
+        }
+
+
+        ~thread_counter()
+        {
+            if (--(*counter_) == 0)
+            {
+                std::lock_guard lockGuard(*mutex_);
+                conditionVariable_->notify_all();
+            }
+        }
+
+        std::shared_ptr<std::atomic<std::size_t>> counter_;
+        std::shared_ptr<std::mutex> mutex_;
+        std::shared_ptr<std::condition_variable> conditionVariable_;
+    };
+}
+
+
 //=============================================================================
 bcpp::system::thread_pool::thread_pool
 (
@@ -21,11 +55,11 @@ bcpp::system::thread_pool::thread_pool
                     std::stop_token stopToken
                 )
                 {
+                    thread_counter threadCounter(threadCount, mutex, conditionVariable);
                     try
                     {
                         if (config.cpuId_.has_value())
                             set_cpu_affinity(config.cpuId_.value());
-                        ++(*threadCount);
                         if (config.initializeHandler_)
                             config.initializeHandler_();
                         config.function_(stopToken);
@@ -39,11 +73,6 @@ bcpp::system::thread_pool::thread_pool
                             config.exceptionHandler_(currentException);
                         else
                             std::rethrow_exception(currentException);
-                    }
-                    if (--(*threadCount) == 0)
-                    {
-                        std::lock_guard lockGuard(*mutex);
-                        conditionVariable->notify_all();
                     }
                 });
         ++index;
