@@ -123,7 +123,7 @@ auto work_contract_test
     static auto constexpr num_contracts_to_use = work_contract_capacity;
 
     // contruct work contract group
-    work_contract_group_4 workContractGroup(work_contract_capacity);
+    work_contract_group workContractGroup(work_contract_capacity);
     std::vector<work_contract> workContracts(num_contracts_to_use);
 
     // containers for gathering stats during test
@@ -153,7 +153,8 @@ auto work_contract_test
     // create a worker thread pool and direct the threads to service the work contract group
     // ensure that each thread is on its own cpu for the sake of this test
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(num_worker_threads);
-    for (auto && [index, thread] : ranges::v3::views::enumerate(threads))
+    auto index = 0;
+    for (auto & thread : threads)
     {
         thread.cpuId_ = index * 2;
         thread.function_ = [&]
@@ -162,8 +163,9 @@ auto work_contract_test
                 ) mutable
                 {
                     while (!stopToken.stop_requested())
-                        workContractGroup.execute_next_contract();//std::chrono::seconds(1));
+                        workContractGroup.execute_next_contract(std::chrono::seconds(1));
                 };
+        ++index;
     }
     bcpp::system::thread_pool threadPool({.threads_ = threads});
 

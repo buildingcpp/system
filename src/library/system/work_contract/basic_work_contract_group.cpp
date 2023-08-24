@@ -1,8 +1,8 @@
-#include "./work_contract_group.h"
+#include "./basic_work_contract_group.h"
 
 
 //=============================================================================
-std::size_t bcpp::system::work_contract_group::get_capacity
+std::size_t bcpp::system::basic_work_contract_group::get_capacity
 (
 ) const
 {
@@ -11,7 +11,7 @@ std::size_t bcpp::system::work_contract_group::get_capacity
 
 
 //=============================================================================
-void bcpp::system::work_contract_group::process_surrender
+void bcpp::system::basic_work_contract_group::process_surrender
 (
     std::int64_t contractId
 )
@@ -34,9 +34,9 @@ void bcpp::system::work_contract_group::process_surrender
 
 
 //=============================================================================
-bcpp::system::work_contract_group::surrender_token::surrender_token
+bcpp::system::basic_work_contract_group::surrender_token::surrender_token
 (
-    work_contract_group * workContractGroup
+    basic_work_contract_group * workContractGroup
 ):
     workContractGroup_(workContractGroup)
 {
@@ -44,7 +44,7 @@ bcpp::system::work_contract_group::surrender_token::surrender_token
 
 
 //=============================================================================
-bool bcpp::system::work_contract_group::surrender_token::invoke
+bool bcpp::system::basic_work_contract_group::surrender_token::invoke
 (
     work_contract const & workContract
 )
@@ -60,7 +60,7 @@ bool bcpp::system::work_contract_group::surrender_token::invoke
 
 
 //=============================================================================
-void bcpp::system::work_contract_group::surrender_token::orphan
+void bcpp::system::basic_work_contract_group::surrender_token::orphan
 (
 )
 {

@@ -2,11 +2,12 @@
 
 #include <atomic>
 #include <cstdint>
+#include <utility>
 
 
 namespace bcpp::system
 {
-    class work_contract_group;
+    class basic_work_contract_group;
 
 
     class work_contract
@@ -38,18 +39,18 @@ namespace bcpp::system
 
     private:
 
-        friend class work_contract_group;
+        friend class basic_work_contract_group;
 
         work_contract
         (
-            work_contract_group *, 
-            std::shared_ptr<typename work_contract_group::surrender_token>,
+            basic_work_contract_group *, 
+            std::shared_ptr<typename basic_work_contract_group::surrender_token>,
             id_type
         );
 
-        work_contract_group *   owner_{};
+        basic_work_contract_group *   owner_{};
 
-        std::shared_ptr<typename work_contract_group::surrender_token> surrenderToken_;
+        std::shared_ptr<typename basic_work_contract_group::surrender_token> surrenderToken_;
 
         id_type                 id_{};
 
@@ -63,8 +64,8 @@ namespace bcpp::system
 //=============================================================================
 inline bcpp::system::work_contract::work_contract
 (
-    work_contract_group * owner,
-    std::shared_ptr<typename work_contract_group::surrender_token> surrenderToken, 
+    basic_work_contract_group * owner,
+    std::shared_ptr<typename basic_work_contract_group::surrender_token> surrenderToken, 
     id_type id
 ):
     owner_(owner),
