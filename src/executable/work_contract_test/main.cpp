@@ -123,8 +123,8 @@ auto work_contract_test
     static auto constexpr num_contracts_to_use = work_contract_capacity;
 
     // contruct work contract group
-    work_contract_group workContractGroup(work_contract_capacity);
-    std::vector<work_contract> workContracts(num_contracts_to_use);
+    non_blocking_work_contract_group workContractGroup(work_contract_capacity);
+    std::vector<non_blocking_work_contract_group::work_contract_type> workContracts(num_contracts_to_use);
 
     // containers for gathering stats during test
     std::vector<std::int64_t> totalTaskCount(num_contracts_to_use);
@@ -163,7 +163,7 @@ auto work_contract_test
                 ) mutable
                 {
                     while (!stopToken.stop_requested())
-                        workContractGroup.execute_next_contract(std::chrono::seconds(1));
+                        workContractGroup.execute_next_contract();
                 };
         ++index;
     }

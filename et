@@ -1,0 +1,57 @@
+[1mdiff --git a/src/executable/work_contract_test/main.cpp b/src/executable/work_contract_test/main.cpp[m
+[1mindex fc871f8..aea43d4 100755[m
+[1m--- a/src/executable/work_contract_test/main.cpp[m
+[1m+++ b/src/executable/work_contract_test/main.cpp[m
+[36m@@ -17,7 +17,7 @@[m
+ [m
+ using namespace bcpp::system;[m
+ [m
+[31m-/*[m
+[32m+[m
+ //=============================================================================[m
+ void bare_minimum_example[m
+ ([m
+[36m@@ -93,7 +93,7 @@[m [mvoid basic_example[m
+     while (!surrendered)[m
+         ;[m
+ }[m
+[31m-*/[m
+[32m+[m
+ [m
+ //=============================================================================[m
+ std::int32_t work_function[m
+[36m@@ -163,7 +163,7 @@[m [mauto work_contract_test[m
+                 ) mutable[m
+                 {[m
+                     while (!stopToken.stop_requested())[m
+[31m-                        workContractGroup.execute_next_contract(std::chrono::seconds(1));[m
+[32m+[m[32m                        workContractGroup.execute_next_contract();//std::chrono::seconds(1));[m
+                 };[m
+         ++index;[m
+     }[m
+[36m@@ -211,9 +211,9 @@[m [mint main[m
+     char const **[m
+ )[m
+ {   [m
+[31m-  //  bare_minimum_example();[m
+[31m-  //  basic_example();[m
+[31m-  //  work_contract_after_group_destroyed_test();[m
+[32m+[m[32m//    bare_minimum_example();[m
+[32m+[m[32m//    basic_example();[m
+[32m+[m[32m//    work_contract_after_group_destroyed_test();[m
+ [m
+     static auto constexpr num_loops = 10;[m
+     auto n = 0;[m
+[1mdiff --git a/src/library/system/work_contract/work_contract_group.h b/src/library/system/work_contract/work_contract_group.h[m
+[1mindex dee0ef5..cddc8a4 100644[m
+[1m--- a/src/library/system/work_contract/work_contract_group.h[m
+[1m+++ b/src/library/system/work_contract/work_contract_group.h[m
+[36m@@ -142,7 +142,7 @@[m [minline void bcpp::system::work_contract_group::execute_next_contract[m
+     static thread_local std::size_t counter = 0;[m
+     static thread_local std::uint64_t tls_inclinationFlags[fold];[m
+     for (auto i = 0; i < fold; ++i, ++counter)[m
+[31m-        if (auto index = (counter++ & fold_mask); workContractGroup_[index].execute_next_contract(tls_inclinationFlags[index]++)) [m
+[32m+[m[32m        if (auto index = (++counter & fold_mask); workContractGroup_[index].execute_next_contract(tls_inclinationFlags[index]++))[m[41m [m
+             return;[m
+ }[m
+ [m

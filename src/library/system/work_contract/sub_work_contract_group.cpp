@@ -1,17 +1,9 @@
-#include "./basic_work_contract_group.h"
+#include "./sub_work_contract_group.h"
 
 
 //=============================================================================
-std::size_t bcpp::system::basic_work_contract_group::get_capacity
-(
-) const
-{
-    return contracts_.size();
-}
-
-
-//=============================================================================
-void bcpp::system::basic_work_contract_group::process_surrender
+template <bcpp::system::work_contract_mode T>
+void bcpp::system::sub_work_contract_group<T>::process_surrender
 (
     std::int64_t contractId
 )
@@ -34,9 +26,10 @@ void bcpp::system::basic_work_contract_group::process_surrender
 
 
 //=============================================================================
-bcpp::system::basic_work_contract_group::surrender_token::surrender_token
+template <bcpp::system::work_contract_mode T>
+bcpp::system::sub_work_contract_group<T>::surrender_token::surrender_token
 (
-    basic_work_contract_group * workContractGroup
+    sub_work_contract_group * workContractGroup
 ):
     workContractGroup_(workContractGroup)
 {
@@ -44,9 +37,10 @@ bcpp::system::basic_work_contract_group::surrender_token::surrender_token
 
 
 //=============================================================================
-bool bcpp::system::basic_work_contract_group::surrender_token::invoke
+template <bcpp::system::work_contract_mode T>
+bool bcpp::system::sub_work_contract_group<T>::surrender_token::invoke
 (
-    work_contract const & workContract
+    work_contract_type const & workContract
 )
 {
     std::lock_guard lockGuard(mutex_);
@@ -60,10 +54,19 @@ bool bcpp::system::basic_work_contract_group::surrender_token::invoke
 
 
 //=============================================================================
-void bcpp::system::basic_work_contract_group::surrender_token::orphan
+template <bcpp::system::work_contract_mode T>
+void bcpp::system::sub_work_contract_group<T>::surrender_token::orphan
 (
 )
 {
     std::lock_guard lockGuard(mutex_);
     workContractGroup_ = nullptr;
+}
+
+
+//=============================================================================
+namespace bcpp::system
+{
+    template class sub_work_contract_group<work_contract_mode::blocking>;
+    template class sub_work_contract_group<work_contract_mode::non_blocking>;
 }

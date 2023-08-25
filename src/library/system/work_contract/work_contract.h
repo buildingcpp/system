@@ -1,5 +1,7 @@
 #pragma once
 
+#include "./work_contract_mode.h"
+
 #include <atomic>
 #include <cstdint>
 #include <utility>
@@ -7,9 +9,12 @@
 
 namespace bcpp::system
 {
-    class basic_work_contract_group;
+
+    template <work_contract_mode T>
+    class sub_work_contract_group;
 
 
+    template <work_contract_mode T>
     class work_contract
     {
     public:
@@ -39,18 +44,18 @@ namespace bcpp::system
 
     private:
 
-        friend class basic_work_contract_group;
+        friend class sub_work_contract_group<T>;
 
         work_contract
         (
-            basic_work_contract_group *, 
-            std::shared_ptr<typename basic_work_contract_group::surrender_token>,
+            sub_work_contract_group<T> *, 
+            std::shared_ptr<typename sub_work_contract_group<T>::surrender_token>,
             id_type
         );
 
-        basic_work_contract_group *   owner_{};
+        sub_work_contract_group<T> *   owner_{};
 
-        std::shared_ptr<typename basic_work_contract_group::surrender_token> surrenderToken_;
+        std::shared_ptr<typename sub_work_contract_group<T>::surrender_token> surrenderToken_;
 
         id_type                 id_{};
 
@@ -58,14 +63,15 @@ namespace bcpp::system
 
 } // namespace bcpp::system
 
-#include "./work_contract_group.h"
+#include "./sub_work_contract_group.h"
 
 
 //=============================================================================
-inline bcpp::system::work_contract::work_contract
+template <bcpp::system::work_contract_mode T>
+inline bcpp::system::work_contract<T>::work_contract
 (
-    basic_work_contract_group * owner,
-    std::shared_ptr<typename basic_work_contract_group::surrender_token> surrenderToken, 
+    sub_work_contract_group<T> * owner,
+    std::shared_ptr<typename sub_work_contract_group<T>::surrender_token> surrenderToken, 
     id_type id
 ):
     owner_(owner),
@@ -76,7 +82,8 @@ inline bcpp::system::work_contract::work_contract
 
 
 //=============================================================================
-inline bcpp::system::work_contract::work_contract
+template <bcpp::system::work_contract_mode T>
+inline bcpp::system::work_contract<T>::work_contract
 (
     work_contract && other
 ):
@@ -91,7 +98,8 @@ inline bcpp::system::work_contract::work_contract
 
     
 //=============================================================================
-inline auto bcpp::system::work_contract::operator =
+template <bcpp::system::work_contract_mode T>
+inline auto bcpp::system::work_contract<T>::operator =
 (
     work_contract && other
 ) -> work_contract &
@@ -110,7 +118,8 @@ inline auto bcpp::system::work_contract::operator =
 
 
 //=============================================================================
-inline bcpp::system::work_contract::~work_contract
+template <bcpp::system::work_contract_mode T>
+inline bcpp::system::work_contract<T>::~work_contract
 (
 )
 {
@@ -119,7 +128,8 @@ inline bcpp::system::work_contract::~work_contract
 
 
 //=============================================================================
-inline auto bcpp::system::work_contract::get_id
+template <bcpp::system::work_contract_mode T>
+inline auto bcpp::system::work_contract<T>::get_id
 (
 ) const -> id_type
 {
@@ -128,7 +138,8 @@ inline auto bcpp::system::work_contract::get_id
 
 
 //=============================================================================
-inline void bcpp::system::work_contract::invoke
+template <bcpp::system::work_contract_mode T>
+inline void bcpp::system::work_contract<T>::invoke
 (
 )
 {
@@ -137,7 +148,8 @@ inline void bcpp::system::work_contract::invoke
 
 
 //=============================================================================
-inline void bcpp::system::work_contract::operator()
+template <bcpp::system::work_contract_mode T>
+inline void bcpp::system::work_contract<T>::operator()
 (
 )
 {
@@ -146,7 +158,8 @@ inline void bcpp::system::work_contract::operator()
 
 
 //=============================================================================
-inline bool bcpp::system::work_contract::surrender
+template <bcpp::system::work_contract_mode T>
+inline bool bcpp::system::work_contract<T>::surrender
 (
 )
 {
@@ -160,7 +173,8 @@ inline bool bcpp::system::work_contract::surrender
 
 
 //=============================================================================
-inline bool bcpp::system::work_contract::is_valid
+template <bcpp::system::work_contract_mode T>
+inline bool bcpp::system::work_contract<T>::is_valid
 (
 ) const
 {
@@ -169,7 +183,8 @@ inline bool bcpp::system::work_contract::is_valid
 
 
 //=============================================================================
-inline bcpp::system::work_contract::operator bool
+template <bcpp::system::work_contract_mode T>
+inline bcpp::system::work_contract<T>::operator bool
 (
 ) const
 {
