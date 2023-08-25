@@ -43,10 +43,11 @@ auto mpmc_test
     auto useless = 0;
 
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(num_worker_threads);
-    for (auto && [index, thread] : ranges::v3::views::enumerate(threads))
+    auto index = 0;
+    for (auto & thread : threads)
     {
         thread.cpuId_ = index * 2;
-        thread.function_ = [&, index]
+        thread.function_ = [&]
                 (
                     auto const & stopToken
                 ) mutable
@@ -62,6 +63,7 @@ auto mpmc_test
                         }
                     }
                 };
+        ++index;
     }
     bcpp::system::thread_pool threadPool({.threads_ = threads});
 

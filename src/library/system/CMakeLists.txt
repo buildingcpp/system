@@ -1,7 +1,7 @@
 
 add_library(system
     ./threading/thread_pool.cpp
-    ./work_contract/work_contract_group.cpp
+    ./work_contract/sub_work_contract_group.cpp
     ./system.cpp
 )
 
