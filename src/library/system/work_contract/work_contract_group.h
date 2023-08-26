@@ -29,7 +29,7 @@ namespace bcpp::system
         using work_contract_type = work_contract<mode>;
         using sub_work_contract_group_type = sub_work_contract_group<mode>;
 
-        static auto constexpr fold = 16;
+        static auto constexpr fold = 8;
         static auto constexpr fold_mask = fold - 1;
 
         work_contract_group
@@ -163,9 +163,11 @@ inline void bcpp::system::work_contract_group<T>::execute_next_contract
 )
 {
     static thread_local std::size_t counter = 0;
+    static std::atomic<std::size_t> stride_ = 1;
+    static thread_local std::size_t stride = ((stride_ + 2) % fold_mask);
     static thread_local std::uint64_t tls_inclinationFlags[fold];
     for (auto i = 0; i < fold; ++i)
-        if (auto index = (counter++ & fold_mask); workContractGroup_[index].execute_next_contract(tls_inclinationFlags[index]++)) 
+        if (auto index = ((counter += stride) & fold_mask); workContractGroup_[index].execute_next_contract(tls_inclinationFlags[index]++)) 
             return;
 }
 

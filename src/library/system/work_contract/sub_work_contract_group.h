@@ -543,7 +543,6 @@ inline auto bcpp::system::sub_work_contract_group<T>::decrement_contract_count
     while ((expected != 0) && (!invocationCounter.compare_exchange_strong(expected, expected - addend)))
         addend = (expected & mask) ? prefered_addend : fallback_addend;
     return {expected ? (1 + (addend > left_mask)) : 0, expected - addend};
-    
 }
 
 

@@ -100,10 +100,21 @@ std::int32_t work_function
 (
 )
 {
-    auto t = 0;
-    for (auto i = 0; i < (1 << 8); ++i)
-        t += std::to_string(i).size();
-    return t;
+    return 1;
+    /*
+    static auto constexpr max = 1000;
+    bool seive[max];
+    for (auto & _ : seive)
+        _ = true;
+    seive[0] = seive[1] = false;
+    for (auto i = 2; i < max; ++i)
+        for (auto n = i * 2; n < max; n += i)
+            seive[n] = false;
+    auto total = 0;
+    for (auto n : seive)
+        total += (n == true);
+    return total;
+    */
 };
 
 
