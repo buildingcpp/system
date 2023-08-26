@@ -1,2 +1,1 @@
-add_subdirectory(work_contract_test)
-add_subdirectory(mpmc_test)
+add_subdirectory(benchmark)

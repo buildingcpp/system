@@ -21,8 +21,6 @@ std::int32_t work_function
 (
 )
 {
-    return 1;
-    /*
     static auto constexpr max = 1000;
     bool seive[max];
     for (auto & _ : seive)
@@ -35,7 +33,6 @@ std::int32_t work_function
     for (auto n : seive)
         total += (n == true);
     return total;
-    */
 };
 
 
@@ -55,9 +52,10 @@ auto mpmc_test
 
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(num_worker_threads);
     auto index = 0;
+    int cores[] = {18,19,20,21,22,25,26,27,28,29,31};
     for (auto & thread : threads)
     {
-        thread.cpuId_ = index * 2;
+        thread.cpuId_ = cores[index];
         thread.function_ = [&]
                 (
                     auto const & stopToken
@@ -107,9 +105,12 @@ auto mpmc_test
     k /= (num_tasks - 1);
     auto sd = std::sqrt(k);
     // report results
+    /*
     std::cout << "Threads = " << num_worker_threads << ", total tasks = " << n << " , tasks per sec = " << (int)(n / test_duration_in_sec) << 
             " , tasks per thread per sec = " << (int)((n / test_duration_in_sec) / num_worker_threads) << 
             " , mean = " << m << " , std dev = " << sd << " , cv = " << std::fixed << std::setprecision(3) << (sd / m) << std::endl;
+            */
+    std::cout << (int)((n / test_duration_in_sec) / num_worker_threads) << "," << m << "," << sd << "," << std::fixed << std::setprecision(3) << (sd / m) << "\n";
     return useless;
 }
 
