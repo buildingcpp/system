@@ -5,7 +5,6 @@
 #include <condition_variable>
 #include <mutex>
 #include <cstdint>
-#include <library/system.h>
 #include <atomic>
 #include <vector>
 #include <thread>
@@ -37,84 +36,6 @@ auto gather_stats
     return {total, mean, sd, sd/ mean};
 }
 
-
-/*
-//=============================================================================
-void bare_minimum_example
-(
-    // bare minimum code 
-    // actually pointless (in the real world) because there is no async processing.
-    // however, a mimium example is useful for understading the basic concepts.
-)
-{
-    work_contract_group workContractGroup(8);
-    auto workContract = workContractGroup.create_contract([](){std::cout << "contract invoked\n";});
-    workContract.invoke();
-    workContractGroup.execute_next_contract();
-}
-
-
-//=============================================================================
-void work_contract_after_group_destroyed_test
-(
-    // test.  destroy the owning work contract group PRIOR to the SURRENDER
-    // of the work contract.  Note: INVOCATION of the work contract is UB once
-    // the owning work contract group has been destroyed.  However, all work contracts
-    // will invoke their surrender function when destroyed.  We want to insure that this
-    // surrender FAILS in the case where the work contract group has already been destroyed.
-)
-{
-    auto workContractGroup = std::make_unique<work_contract_group>(8);
-    auto workContract = workContractGroup->create_contract([](){std::cout << "contract invoked\n";}, nullptr);
-
-    workContract.invoke();
-    workContractGroup->execute_next_contract();
-    workContractGroup.reset();
-}
-
-
-//=============================================================================
-void basic_example
-(
-    // create a work contract group
-    // create a worker thread to asyncrhonously process invoked contracts
-    // create a work contract
-    // invoke the work contract some predetermined number of times
-    // surrender the work contract
-    // wait for the async surrender of the work contract to complete
-)
-{
-    // create work contract group
-    static auto constexpr max_number_of_contracts = 32;
-    work_contract_group workContractGroup(max_number_of_contracts);
-
-    // create worker thread to service work contracts asynchronously
-    std::jthread workerThread([&](auto const & stopToken)
-            {
-                while (!stopToken.stop_requested()) 
-                    workContractGroup.execute_next_contract();
-            });
-
-    std::atomic<std::size_t> invokeCounter{16};
-    std::atomic<bool> surrendered{false};
-
-    // create a work contract from the work contract group
-    auto workContract = workContractGroup.create_contract(
-            [&](){std::cout << "invokeCounter = " << --invokeCounter << "\n";},         // this is the async function
-            [&](){std::cout << "work contract surrendered\n"; surrendered = true;});    // this is the one-shot surrender function
-                    
-    // invoke the work contract until the number of async invocations of that contract have been completed
-    while (invokeCounter)
-        workContract.invoke();
-
-    // explicitly surrender the work contract.  this could be done by simply letting the work contract
-    // go out of scope however, the surrender function is async and therefore might not take place.
-    workContract.surrender();
-    // wait for the work contract's one-shot surrender function to take place
-    while (!surrendered)
-        ;
-}
-*/
 
 //=============================================================================
 template <std::size_t N>
@@ -377,9 +298,6 @@ int main
 )
 {   
     using namespace std::chrono;
-  //  bare_minimum_example();
-  //  basic_example();
-  //  work_contract_after_group_destroyed_test();
 
     static auto constexpr testDuration = 10s;
     static auto constexpr numConcurrentTasks = 256;
@@ -391,32 +309,32 @@ int main
         std::string title
     )
     {
-        static auto constexpr num_loops = 10;
+        static auto constexpr max_threads = 10;
 
-        std::cout << "tbb queue\n";
+        std::cout << "TBB concurrent_queue\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
-        for (auto i = 0; i < num_loops; ++i)
+        for (auto i = 1; i < max_threads; ++i)
             tbb_test(i + 1, testDuration, numConcurrentTasks, maxTaskCapacity, task);
 
-        std::cout << "mpmc queue\n";
+        std::cout << "moodycamel ConcurrentQueue\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
-        for (auto i = 0; i < num_loops; ++i)
+        for (auto i = 1; i < max_threads; ++i)
             mpmc_test(i + 1, testDuration, numConcurrentTasks, maxTaskCapacity, task);
 
         std::cout << "work contract\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
-        for (auto i = 0; i < num_loops; ++i)
+        for (auto i = 1; i < max_threads; ++i)
             work_contract_test(i + 1, testDuration, numConcurrentTasks, maxTaskCapacity, task);
 
     };
 
+    run_test(+[](){}, "maximum contention");
     run_test(seive<100>, "heavy contention");
     run_test(seive<300>, "medium contention");
     run_test(seive<1000>, "low contention");
-    run_test(+[](){}, "maximum contention");
 
     return 0;
 }
