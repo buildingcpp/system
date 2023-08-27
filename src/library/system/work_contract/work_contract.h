@@ -61,6 +61,9 @@ namespace bcpp::system
 
     }; // class work_contract
 
+    using non_blocking_work_contract = work_contract<work_contract_mode::non_blocking>;
+    using blocking_work_contract = work_contract<work_contract_mode::blocking>;
+
 } // namespace bcpp::system
 
 #include "./sub_work_contract_group.h"
