@@ -314,19 +314,19 @@ int main
         std::cout << "TBB concurrent_queue\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
-        for (auto i = 1; i < max_threads; ++i)
+        for (auto i = 1; i <= max_threads; ++i)
             tbb_test(i + 1, testDuration, numConcurrentTasks, maxTaskCapacity, task);
 
         std::cout << "moodycamel ConcurrentQueue\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
-        for (auto i = 1; i < max_threads; ++i)
+        for (auto i = 1; i <= max_threads; ++i)
             mpmc_test(i + 1, testDuration, numConcurrentTasks, maxTaskCapacity, task);
 
         std::cout << "work contract\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
-        for (auto i = 1; i < max_threads; ++i)
+        for (auto i = 1; i <= max_threads; ++i)
             work_contract_test(i + 1, testDuration, numConcurrentTasks, maxTaskCapacity, task);
 
     };
@@ -338,3 +338,4 @@ int main
 
     return 0;
 }
+
