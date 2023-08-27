@@ -157,7 +157,7 @@ auto tbb_test
 
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(numWorkerThreads);
     auto index = 0;
-    int cores[] = {18,19,20,21,22,25,26,27,28,29,31};
+    int cores[] = {0,2,4,6,8,10,12,14,16,18,20};
     for (auto & thread : threads)
     {
         thread.cpuId_ = cores[index];
@@ -229,7 +229,7 @@ auto mpmc_test
 
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(numWorkerThreads);
     auto index = 0;
-    int cores[] = {18,19,20,21,22,25,26,27,28,29,31};
+    int cores[] = {0,2,4,6,8,10,12,14,16,18,20};
     for (auto & thread : threads)
     {
         thread.cpuId_ = cores[index];
@@ -327,7 +327,7 @@ auto work_contract_test
     // ensure that each thread is on its own cpu for the sake of this test
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(numWorkerThreads);
     auto index = 0;
-    int cores[] = {18,19,20,21,22,25,26,27,28,29,31};
+    int cores[] = {0,2,4,6,8,10,12,14,16,18,20};
 
     for (auto i = 0; i < numWorkerThreads; ++i)
     {
