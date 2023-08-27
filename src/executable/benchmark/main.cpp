@@ -215,8 +215,8 @@ auto work_contract_test
 )
 {
     // contruct work contract group
-    non_blocking_work_contract_group workContractGroup(maxTaskCapacity);
-    std::vector<non_blocking_work_contract_group::work_contract_type> workContracts(numConcurrentTasks);
+    work_contract_group workContractGroup(maxTaskCapacity);
+    std::vector<work_contract> workContracts(numConcurrentTasks);
 
     // containers for gathering stats during test
     std::vector<std::size_t> perThreadTaskCount(numWorkerThreads);
@@ -230,19 +230,19 @@ auto work_contract_test
                 [&, index = i]
                 (
                     // the work to do.  
-                    // each time work contract is executed increase counter and then re-invoke the same contract again.
+                    // each time work contract is executed increase counter and then re-schedule the same contract again.
                 )
                 {
                     ++perThreadTaskCount[tlsThreadIndex];
                     task();
                     taskExecutionCount[index]++;
-                    workContracts[index].invoke();
+                    workContracts[index].schedule();
                 });
     }
 
-    // invoke each of the contracts to start things off
+    // schedule each of the contracts to start things off
     for (auto & workContract : workContracts)
-        workContract.invoke();
+        workContract.schedule();
 
     // create a worker thread pool and direct the threads to service the work contract group
     // ensure that each thread is on its own cpu for the sake of this test

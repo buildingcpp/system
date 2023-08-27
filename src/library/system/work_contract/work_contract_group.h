@@ -17,88 +17,91 @@
 namespace bcpp::system
 {
 
-    template <work_contract_mode T>
-    class work_contract_group :
-        non_movable,
-        non_copyable
+    namespace internal
     {
-    public:
-
-        static auto constexpr mode = T;
-
-        using work_contract_type = work_contract<mode>;
-        using sub_work_contract_group_type = sub_work_contract_group<mode>;
-
-        static auto constexpr fold = 8;
-        static auto constexpr fold_mask = fold - 1;
-
-        work_contract_group
-        (
-            std::uint64_t
-        );
-
-        ~work_contract_group();
-
-        work_contract_type create_contract
-        (
-            std::function<void()>
-        );
-
-        work_contract_type create_contract
-        (
-            std::function<void()>,
-            std::function<void()>
-        );
-
-        void execute_next_contract
-        (
-            std::chrono::nanoseconds
-        ) requires (mode == work_contract_mode::blocking);
-
-        void execute_next_contract();
-
-        void stop();
-
-    private:
-
-        std::atomic<std::uint64_t>                  counter_;
-        std::shared_ptr<waitable_state>             waitableState_;
-        std::array<sub_work_contract_group_type, fold> workContractGroup_;
-
-
-        template <std::size_t ... N>
-        decltype(workContractGroup_) initialize_work_contract_group_array
-        (
-            std::index_sequence<N ...>,
-            std::uint64_t capacity
-        ) requires (mode == work_contract_mode::blocking)
+        template <work_contract_mode T>
+        class work_contract_group :
+            non_movable,
+            non_copyable
         {
-            return {sub_work_contract_group_type(capacity + N - N, waitableState_) ...};
-        }
+        public:
 
-        template <std::size_t ... N>
-        decltype(workContractGroup_) initialize_work_contract_group_array
-        (
-            std::index_sequence<N ...>,
-            std::uint64_t capacity
-        ) requires (mode == work_contract_mode::non_blocking)
-        {
-            return {sub_work_contract_group_type(capacity + N - N) ...};
-        }
+            static auto constexpr mode = T;
 
-    };
+            using work_contract_type = work_contract<mode>;
+            using sub_work_contract_group_type = sub_work_contract_group<mode>;
+
+            static auto constexpr fold = 8;
+            static auto constexpr fold_mask = fold - 1;
+
+            work_contract_group
+            (
+                std::uint64_t
+            );
+
+            ~work_contract_group();
+
+            work_contract_type create_contract
+            (
+                std::function<void()>
+            );
+
+            work_contract_type create_contract
+            (
+                std::function<void()>,
+                std::function<void()>
+            );
+
+            void execute_next_contract
+            (
+                std::chrono::nanoseconds
+            ) requires (mode == work_contract_mode::blocking);
+
+            void execute_next_contract();
+
+            void stop();
+
+        private:
+
+            std::atomic<std::uint64_t>                  counter_;
+            std::shared_ptr<waitable_state>             waitableState_;
+            std::array<sub_work_contract_group_type, fold> workContractGroup_;
 
 
-    using non_blocking_work_contract_group = work_contract_group<work_contract_mode::non_blocking>;
-    using blocking_work_contract_group = work_contract_group<work_contract_mode::blocking>;
+            template <std::size_t ... N>
+            decltype(workContractGroup_) initialize_work_contract_group_array
+            (
+                std::index_sequence<N ...>,
+                std::uint64_t capacity
+            ) requires (mode == work_contract_mode::blocking)
+            {
+                return {sub_work_contract_group_type(capacity + N - N, waitableState_) ...};
+            }
+
+            template <std::size_t ... N>
+            decltype(workContractGroup_) initialize_work_contract_group_array
+            (
+                std::index_sequence<N ...>,
+                std::uint64_t capacity
+            ) requires (mode == work_contract_mode::non_blocking)
+            {
+                return {sub_work_contract_group_type(capacity + N - N) ...};
+            }
+
+        };
+
+    } // namespace internal
+
+    using work_contract_group = internal::work_contract_group<internal::work_contract_mode::non_blocking>;
+    using blocking_work_contract_group = internal::work_contract_group<internal::work_contract_mode::blocking>;
 
 
 } // namespace bcpp::system
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline bcpp::system::work_contract_group<T>::work_contract_group
+template <bcpp::system::internal::work_contract_mode T>
+inline bcpp::system::internal::work_contract_group<T>::work_contract_group
 (
     std::uint64_t capacity
 ):
@@ -109,8 +112,8 @@ inline bcpp::system::work_contract_group<T>::work_contract_group
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline bcpp::system::work_contract_group<T>::~work_contract_group
+template <bcpp::system::internal::work_contract_mode T>
+inline bcpp::system::internal::work_contract_group<T>::~work_contract_group
 (
 )
 {
@@ -119,8 +122,8 @@ inline bcpp::system::work_contract_group<T>::~work_contract_group
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline auto bcpp::system::work_contract_group<T>::create_contract
+template <bcpp::system::internal::work_contract_mode T>
+inline auto bcpp::system::internal::work_contract_group<T>::create_contract
 (
     std::function<void()> f
 ) -> work_contract_type
@@ -130,8 +133,8 @@ inline auto bcpp::system::work_contract_group<T>::create_contract
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline auto bcpp::system::work_contract_group<T>::create_contract
+template <bcpp::system::internal::work_contract_mode T>
+inline auto bcpp::system::internal::work_contract_group<T>::create_contract
 (
     std::function<void()> f,
     std::function<void()> s
@@ -145,8 +148,8 @@ inline auto bcpp::system::work_contract_group<T>::create_contract
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::work_contract_group<T>::execute_next_contract
+template <bcpp::system::internal::work_contract_mode T>
+inline void bcpp::system::internal::work_contract_group<T>::execute_next_contract
 (
     std::chrono::nanoseconds duration
 ) requires (mode == work_contract_mode::blocking)
@@ -157,8 +160,8 @@ inline void bcpp::system::work_contract_group<T>::execute_next_contract
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::work_contract_group<T>::execute_next_contract
+template <bcpp::system::internal::work_contract_mode T>
+inline void bcpp::system::internal::work_contract_group<T>::execute_next_contract
 (
 )
 {
@@ -173,8 +176,8 @@ inline void bcpp::system::work_contract_group<T>::execute_next_contract
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::work_contract_group<T>::stop
+template <bcpp::system::internal::work_contract_mode T>
+inline void bcpp::system::internal::work_contract_group<T>::stop
 (
 )
 {
