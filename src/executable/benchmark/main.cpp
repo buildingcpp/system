@@ -300,8 +300,8 @@ int main
     using namespace std::chrono;
 
     static auto constexpr testDuration = 10s;
-    static auto constexpr numConcurrentTasks = (1 << 8);
-    static auto constexpr maxTaskCapacity = (1 << 10);
+    static auto constexpr numConcurrentTasks = 1 << 8;
+    static auto constexpr maxTaskCapacity = numConcurrentTasks;
 
     auto run_test = []<typename T>
     (
@@ -328,6 +328,7 @@ int main
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
         for (auto i = 1; i <= max_threads; ++i)
             work_contract_test(i + 1, testDuration, numConcurrentTasks, maxTaskCapacity, task);
+
     };
 
     run_test(+[](){}, "maximum contention");

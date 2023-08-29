@@ -12,6 +12,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <concepts>
 
 
 namespace bcpp::system
@@ -31,7 +32,7 @@ namespace bcpp::system
             using work_contract_type = work_contract<mode>;
             using sub_work_contract_group_type = sub_work_contract_group<mode>;
 
-            static auto constexpr fold = 8;
+            static auto constexpr fold = 256;
             static auto constexpr fold_mask = fold - 1;
 
             work_contract_group
@@ -43,13 +44,13 @@ namespace bcpp::system
 
             work_contract_type create_contract
             (
-                std::function<void()>
+                std::invocable auto &&
             );
 
             work_contract_type create_contract
             (
-                std::function<void()>,
-                std::function<void()>
+                std::invocable auto &&,
+                std::invocable auto &&
             );
 
             void execute_next_contract
@@ -125,10 +126,10 @@ inline bcpp::system::internal::work_contract_group<T>::~work_contract_group
 template <bcpp::system::internal::work_contract_mode T>
 inline auto bcpp::system::internal::work_contract_group<T>::create_contract
 (
-    std::function<void()> f
+    std::invocable auto && workFunction
 ) -> work_contract_type
 {
-    return create_contract(f, nullptr);
+    return create_contract(std::forward<decltype(workFunction)>(workFunction), +[](){});
 }
 
 
@@ -136,12 +137,12 @@ inline auto bcpp::system::internal::work_contract_group<T>::create_contract
 template <bcpp::system::internal::work_contract_mode T>
 inline auto bcpp::system::internal::work_contract_group<T>::create_contract
 (
-    std::function<void()> f,
-    std::function<void()> s
+    std::invocable auto && workFunction,
+    std::invocable auto && releaseFunction
 ) -> work_contract_type
 {
     for (auto i = 0; i < fold; ++i)
-        if (auto workContract = workContractGroup_[counter_++ & fold_mask].create_contract(f, s); workContract) 
+        if (auto workContract = workContractGroup_[counter_++ & fold_mask].create_contract(std::forward<decltype(workFunction)>(workFunction), std::forward<decltype(releaseFunction)>(releaseFunction)); workContract) 
             return workContract;
     return {};
 }
