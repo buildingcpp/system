@@ -167,7 +167,7 @@ inline void bcpp::system::internal::work_contract_group<T>::execute_next_contrac
 {
     static thread_local std::size_t counter = 0;
     static std::atomic<std::size_t> stride_ = 1;
-    static thread_local std::size_t stride = ((stride_ += 2) % fold_mask);
+    static thread_local std::size_t stride = 1;// TODO ((stride_ += 2) % fold_mask);
     static thread_local std::uint64_t tls_inclinationFlags[fold];
     for (auto i = 0; i < fold; ++i)
         if (auto index = ((counter += stride) & fold_mask); workContractGroup_[index].execute_next_contract(tls_inclinationFlags[index]++)) 
