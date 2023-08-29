@@ -1,7 +1,7 @@
 #pragma once
 
 
-namespace bcpp::system
+namespace bcpp::system::internal
 {
 
     enum class work_contract_mode : bool

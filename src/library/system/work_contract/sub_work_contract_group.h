@@ -17,200 +17,204 @@
 namespace bcpp::system 
 {
 
-    template <work_contract_mode>
-    class work_contract;
-
-
-    template <work_contract_mode T>
-    class sub_work_contract_group :
-        non_copyable
+    namespace internal
     {
-    public:
-
-        static auto constexpr mode = T;
-        using work_contract_type = work_contract<mode>;
+        template <work_contract_mode>
+        class work_contract;
 
 
-        class surrender_token;
-
-        sub_work_contract_group() = default;
-
-        sub_work_contract_group(sub_work_contract_group &&);
-
-        sub_work_contract_group & operator = (sub_work_contract_group &&) = delete;
-
-        sub_work_contract_group
-        (
-            std::uint64_t
-        ) requires (mode == work_contract_mode::non_blocking);
-
-        sub_work_contract_group
-        (
-            std::uint64_t,
-            std::shared_ptr<waitable_state>
-        ) requires (mode == work_contract_mode::blocking);
-
-        ~sub_work_contract_group();
-
-        work_contract_type create_contract
-        (
-            std::function<void()>
-        );
-
-        work_contract_type create_contract
-        (
-            std::function<void()>,
-            std::function<void()>
-        );
-
-        bool execute_next_contract
-        (
-            std::uint64_t
-        );
-
-        void stop();
-
-    private:
-
-        friend class work_contract<mode>;
-        friend class surrender_token;
-
-        static auto constexpr left_addend   = 0x0000000000000001ull;
-        static auto constexpr left_mask     = 0x00000000ffffffffull;
-        static auto constexpr right_mask    = 0xffffffff00000000ull;
-        static auto constexpr right_addend  = 0x0000000100000000ull;
-
-        struct contract
+        template <work_contract_mode T>
+        class sub_work_contract_group :
+            non_copyable
         {
-            static auto constexpr surrender_flag    = 0x00000004;
-            static auto constexpr execute_flag      = 0x00000002;
-            static auto constexpr invoke_flag       = 0x00000001;
-        
-            std::function<void()>       work_;
-            std::function<void()>       surrender_;
-            std::atomic<std::int32_t>   flags_;
-        };
+        public:
 
-        void invoke
-        (
-            work_contract_type const &
-        );
+            static auto constexpr mode = T;
+            using work_contract_type = work_contract<mode>;
 
-        void surrender
-        (
-            work_contract_type const &
-        );        
-        
-        template <std::size_t>
-        void set_contract_flag
-        (
-            work_contract_type const &
-        );
 
-        enum class inclination : std::uint32_t
-        {
-            left = 0,
-            right = 1
-        };
+            class release_token;
 
-        template <inclination>
-        std::pair<std::int64_t, std::uint64_t> decrement_contract_count(std::int64_t);
+            sub_work_contract_group() = default;
 
-        std::size_t process_contract();
+            sub_work_contract_group(sub_work_contract_group &&);
 
-        void process_surrender(std::int64_t);
+            sub_work_contract_group & operator = (sub_work_contract_group &&) = delete;
 
-        void process_contract(std::int64_t);
+            sub_work_contract_group
+            (
+                std::uint64_t
+            ) requires (mode == work_contract_mode::non_blocking);
 
-        void increment_contract_count
-        (
-            std::int64_t
-        ) requires (mode == work_contract_mode::blocking);
-        
-        void increment_contract_count
-        (
-            std::int64_t
-        ) requires (mode == work_contract_mode::non_blocking);
+            sub_work_contract_group
+            (
+                std::uint64_t,
+                std::shared_ptr<waitable_state>
+            ) requires (mode == work_contract_mode::blocking);
 
-        union alignas(8) invocation_counter
-        {
-            invocation_counter():u64_(){static_assert(sizeof(*this) == sizeof(std::uint64_t));}
-            std::atomic<std::uint64_t> u64_;
-            struct parts
+            ~sub_work_contract_group();
+
+            work_contract_type create_contract
+            (
+                std::function<void()>
+            );
+
+            work_contract_type create_contract
+            (
+                std::function<void()>,
+                std::function<void()>
+            );
+
+            bool execute_next_contract
+            (
+                std::uint64_t
+            );
+
+            void stop();
+
+        private:
+
+            friend class work_contract<mode>;
+            friend class release_token;
+
+            static auto constexpr left_addend   = 0x0000000000000001ull;
+            static auto constexpr left_mask     = 0x00000000ffffffffull;
+            static auto constexpr right_mask    = 0xffffffff00000000ull;
+            static auto constexpr right_addend  = 0x0000000100000000ull;
+
+            struct contract
             {
-                std::uint32_t left_;
-                std::uint32_t right_;
-            } u32_;
-            std::uint64_t get_count() const
+                static auto constexpr release_flag    = 0x00000004;
+                static auto constexpr execute_flag      = 0x00000002;
+                static auto constexpr schedule_flag       = 0x00000001;
+            
+                std::function<void()>       work_;
+                std::function<void()>       release_;
+                std::atomic<std::int32_t>   flags_;
+            };
+
+            void schedule
+            (
+                work_contract_type const &
+            );
+
+            void release
+            (
+                work_contract_type const &
+            );        
+            
+            template <std::size_t>
+            void set_contract_flag
+            (
+                work_contract_type const &
+            );
+
+            enum class inclination : std::uint32_t
             {
-                auto n = u64_.load();
-                return ((n >> 32) + (n & 0xffffffff));
-            }
+                left = 0,
+                right = 1
+            };
+
+            template <inclination>
+            std::pair<std::int64_t, std::uint64_t> decrement_contract_count(std::int64_t);
+
+            std::size_t process_contract();
+
+            void process_release(std::int64_t);
+
+            void process_contract(std::int64_t);
+
+            void increment_contract_count
+            (
+                std::int64_t
+            ) requires (mode == work_contract_mode::blocking);
+            
+            void increment_contract_count
+            (
+                std::int64_t
+            ) requires (mode == work_contract_mode::non_blocking);
+
+            union alignas(8) invocation_counter
+            {
+                invocation_counter():u64_(){static_assert(sizeof(*this) == sizeof(std::uint64_t));}
+                std::atomic<std::uint64_t> u64_;
+                struct parts
+                {
+                    std::uint32_t left_;
+                    std::uint32_t right_;
+                } u32_;
+                std::uint64_t get_count() const
+                {
+                    auto n = u64_.load();
+                    return ((n >> 32) + (n & 0xffffffff));
+                }
+            };
+
+            template <std::uint64_t N>
+            std::uint64_t select_contract
+            (
+                std::uint64_t &,
+                std::uint64_t
+            );
+
+            template <std::uint64_t N>
+            std::uint64_t select_scheduled_contract_bit
+            (
+                std::uint64_t,
+                std::uint64_t,
+                std::uint64_t
+            ) const;
+
+            template <std::uint64_t N>
+            std::uint64_t get_available_contract_bit
+            (
+                std::uint64_t,
+                std::uint64_t
+            );
+
+            std::size_t get_available_contract();
+
+            std::uint64_t                                   capacity_;
+            std::vector<invocation_counter>                 invocationCounter_;
+            std::vector<std::atomic<std::uint64_t>>         scheduledFlag_;
+
+            std::vector<invocation_counter>                 availableCounter_;
+            std::vector<std::atomic<std::uint64_t>>         availableFlag_;
+
+            std::vector<contract>                           contracts_;
+
+            std::vector<std::shared_ptr<release_token>>     releaseToken_;
+
+            std::int64_t                                    firstContractIndex_;
+
+            std::mutex                                      mutex_;
+
+            std::shared_ptr<waitable_state>                 waitableState_;
+
+            std::atomic<bool>                               stopped_{false};
+
+        }; // class sub_work_contract_group
+
+
+        template <work_contract_mode T>
+        class sub_work_contract_group<T>::release_token
+        {
+        public:
+
+            release_token
+            (
+                sub_work_contract_group *
+            );
+            
+            std::mutex mutex_;
+            sub_work_contract_group * workContractGroup_{};
+
+            bool schedule(work_contract_type const &);
+
+            void orphan();
         };
 
-        template <std::uint64_t N>
-        std::uint64_t select_contract
-        (
-            std::uint64_t &,
-            std::uint64_t
-        );
-
-        template <std::uint64_t N>
-        std::uint64_t select_invoked_contract_bit
-        (
-            std::uint64_t,
-            std::uint64_t,
-            std::uint64_t
-        ) const;
-
-        template <std::uint64_t N>
-        std::uint64_t get_available_contract_bit
-        (
-            std::uint64_t,
-            std::uint64_t
-        );
-
-        std::size_t get_available_contract();
-
-        std::uint64_t                                   capacity_;
-        std::vector<invocation_counter>                 invocationCounter_;
-        std::vector<std::atomic<std::uint64_t>>         invokedFlag_;
-
-        std::vector<invocation_counter>                 availableCounter_;
-        std::vector<std::atomic<std::uint64_t>>         availableFlag_;
-
-        std::vector<contract>                           contracts_;
-
-        std::vector<std::shared_ptr<surrender_token>>   surrenderToken_;
-
-        std::int64_t                                    firstContractIndex_;
-
-        std::mutex                                      mutex_;
-
-        std::shared_ptr<waitable_state>                 waitableState_;
-
-        std::atomic<bool>                               stopped_{false};
-
-    }; // class sub_work_contract_group
-
-
-    template <work_contract_mode T>
-    class sub_work_contract_group<T>::surrender_token
-    {
-    public:
-
-        surrender_token
-        (
-            sub_work_contract_group *
-        );
-        
-        std::mutex mutex_;
-        sub_work_contract_group * workContractGroup_{};
-
-        bool invoke(work_contract_type const &);
-
-        void orphan();
-    };
+    } // namespace internal
 
 } // namespace bcpp::system
 
@@ -219,19 +223,19 @@ namespace bcpp::system
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline bcpp::system::sub_work_contract_group<T>::sub_work_contract_group
+template <bcpp::system::internal::work_contract_mode T>
+inline bcpp::system::internal::sub_work_contract_group<T>::sub_work_contract_group
 (
     std::uint64_t capacity,
     std::shared_ptr<waitable_state> waitableState
 ) requires (mode == work_contract_mode::blocking) :
     capacity_((capacity < 256) ? 256 : ((capacity + 63) / 64) * 64),
     invocationCounter_(capacity_ / 64),
-    invokedFlag_(capacity_ / 64),
+    scheduledFlag_(capacity_ / 64),
     availableCounter_(capacity_ / 64),
     availableFlag_(capacity_ / 64),
     contracts_(capacity_),
-    surrenderToken_(capacity_),
+    releaseToken_(capacity_),
     waitableState_(waitableState),
     firstContractIndex_((capacity_ / 64) - 1)
 {
@@ -251,18 +255,18 @@ inline bcpp::system::sub_work_contract_group<T>::sub_work_contract_group
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline bcpp::system::sub_work_contract_group<T>::sub_work_contract_group
+template <bcpp::system::internal::work_contract_mode T>
+inline bcpp::system::internal::sub_work_contract_group<T>::sub_work_contract_group
 (
     std::uint64_t capacity
 ) requires (mode == work_contract_mode::non_blocking) :
     capacity_((capacity < 256) ? 256 : ((capacity + 63) / 64) * 64),
     invocationCounter_(capacity_ / 64),
-    invokedFlag_(capacity_ / 64),
+    scheduledFlag_(capacity_ / 64),
     availableCounter_(capacity_ / 64),
     availableFlag_(capacity_ / 64),
     contracts_(capacity_),
-    surrenderToken_(capacity_),
+    releaseToken_(capacity_),
     firstContractIndex_((capacity_ / 64) - 1)
 {
     std::uint32_t c = capacity_;
@@ -281,18 +285,18 @@ inline bcpp::system::sub_work_contract_group<T>::sub_work_contract_group
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline bcpp::system::sub_work_contract_group<T>::sub_work_contract_group
+template <bcpp::system::internal::work_contract_mode T>
+inline bcpp::system::internal::sub_work_contract_group<T>::sub_work_contract_group
 (
     sub_work_contract_group && other
 ) :
     capacity_(other.capacity_),
     invocationCounter_(std::move(other.invocationCounter_)),
-    invokedFlag_(std::move(other.invokedFlag_)),
+    scheduledFlag_(std::move(other.scheduledFlag_)),
     availableCounter_(std::move(other.availableCounter_)),
     availableFlag_(std::move(other.availableFlag_)),
     contracts_(std::move(other.contracts_)),
-    surrenderToken_(std::move(other.surrenderToken_)),
+    releaseToken_(std::move(other.releaseToken_)),
     waitableState_(std::move(other.waitableState_)),
     firstContractIndex_(other.firstContractIndex_)
 {
@@ -301,8 +305,8 @@ inline bcpp::system::sub_work_contract_group<T>::sub_work_contract_group
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline bcpp::system::sub_work_contract_group<T>::~sub_work_contract_group
+template <bcpp::system::internal::work_contract_mode T>
+inline bcpp::system::internal::sub_work_contract_group<T>::~sub_work_contract_group
 (
 )
 {
@@ -311,23 +315,23 @@ inline bcpp::system::sub_work_contract_group<T>::~sub_work_contract_group
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::sub_work_contract_group<T>::stop
+template <bcpp::system::internal::work_contract_mode T>
+inline void bcpp::system::internal::sub_work_contract_group<T>::stop
 (
 )
 {
     if (bool wasRunning = !stopped_.exchange(true); wasRunning)
     {
-        for (auto & surrenderToken : surrenderToken_)
-            if ((bool)surrenderToken)
-                surrenderToken->orphan();
+        for (auto & releaseToken : releaseToken_)
+            if ((bool)releaseToken)
+                releaseToken->orphan();
     }
 }
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline auto bcpp::system::sub_work_contract_group<T>::create_contract
+template <bcpp::system::internal::work_contract_mode T>
+inline auto bcpp::system::internal::sub_work_contract_group<T>::create_contract
 (
     std::function<void()> function
 ) -> work_contract_type
@@ -337,11 +341,11 @@ inline auto bcpp::system::sub_work_contract_group<T>::create_contract
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline auto bcpp::system::sub_work_contract_group<T>::create_contract
+template <bcpp::system::internal::work_contract_mode T>
+inline auto bcpp::system::internal::sub_work_contract_group<T>::create_contract
 (
     std::function<void()> function,
-    std::function<void()> surrender
+    std::function<void()> release
 ) -> work_contract_type
 {
 
@@ -351,43 +355,43 @@ inline auto bcpp::system::sub_work_contract_group<T>::create_contract
     auto & contract = contracts_[contractId];
     contract.flags_ = 0;
     contract.work_ = function;
-    contract.surrender_ = surrender;
-    auto surrenderToken = surrenderToken_[contractId] = std::make_shared<surrender_token>(this);
-    return {this, surrenderToken, contractId};
+    contract.release_ = release;
+    auto releaseToken = releaseToken_[contractId] = std::make_shared<release_token>(this);
+    return {this, releaseToken, contractId};
 }
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::sub_work_contract_group<T>::surrender
+template <bcpp::system::internal::work_contract_mode T>
+inline void bcpp::system::internal::sub_work_contract_group<T>::release
 (
     work_contract_type const & workContract
 )
 {
-    set_contract_flag<contract::surrender_flag | contract::invoke_flag>(workContract);
+    set_contract_flag<contract::release_flag | contract::schedule_flag>(workContract);
 }
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::sub_work_contract_group<T>::invoke
+template <bcpp::system::internal::work_contract_mode T>
+inline void bcpp::system::internal::sub_work_contract_group<T>::schedule
 (
     work_contract_type const & workContract
 )
 {
-    set_contract_flag<contract::invoke_flag>(workContract);
+    set_contract_flag<contract::schedule_flag>(workContract);
 }
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
+template <bcpp::system::internal::work_contract_mode T>
 template <std::size_t flags_to_set>
-inline void bcpp::system::sub_work_contract_group<T>::set_contract_flag
+inline void bcpp::system::internal::sub_work_contract_group<T>::set_contract_flag
 (
     work_contract_type const & workContract
 )
 {
-    static auto constexpr flags_mask = (contract::execute_flag | contract::invoke_flag);
+    static auto constexpr flags_mask = (contract::execute_flag | contract::schedule_flag);
     auto contractId = workContract.get_id();
     if ((contracts_[contractId].flags_.fetch_or(flags_to_set) & flags_mask) == 0)
         increment_contract_count(contractId);
@@ -395,11 +399,11 @@ inline void bcpp::system::sub_work_contract_group<T>::set_contract_flag
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
+template <bcpp::system::internal::work_contract_mode T>
 template <std::uint64_t N>
-inline std::uint64_t bcpp::system::sub_work_contract_group<T>::get_available_contract_bit
+inline std::uint64_t bcpp::system::internal::sub_work_contract_group<T>::get_available_contract_bit
 (
-    std::uint64_t invokedFlags,
+    std::uint64_t scheduledFlags,
     std::uint64_t selection
 )
 {
@@ -413,18 +417,18 @@ inline std::uint64_t bcpp::system::sub_work_contract_group<T>::get_available_con
         static auto constexpr left_bit_mask = ~((1ull << bits_to_consider) - 1);
         static auto constexpr right_bit_mask = ~left_bit_mask;
 
-        auto leftCount = std::popcount(invokedFlags & left_bit_mask);
-        auto rightCount = std::popcount(invokedFlags & right_bit_mask);
+        auto leftCount = std::popcount(scheduledFlags & left_bit_mask);
+        auto rightCount = std::popcount(scheduledFlags & right_bit_mask);
         if (leftCount < rightCount)
-            return get_available_contract_bit<N - 1>(invokedFlags & right_bit_mask, selection + bits_to_consider);
-        return get_available_contract_bit<N - 1>((invokedFlags >> bits_to_consider) & right_bit_mask, selection);
+            return get_available_contract_bit<N - 1>(scheduledFlags & right_bit_mask, selection + bits_to_consider);
+        return get_available_contract_bit<N - 1>((scheduledFlags >> bits_to_consider) & right_bit_mask, selection);
     }
 }
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline std::size_t bcpp::system::sub_work_contract_group<T>::get_available_contract
+template <bcpp::system::internal::work_contract_mode T>
+inline std::size_t bcpp::system::internal::sub_work_contract_group<T>::get_available_contract
 (
     // find an unclaimed contract
     // do so with consideration to how balanced the tree is
@@ -463,13 +467,13 @@ inline std::size_t bcpp::system::sub_work_contract_group<T>::get_available_contr
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::sub_work_contract_group<T>::increment_contract_count
+template <bcpp::system::internal::work_contract_mode T>
+inline void bcpp::system::internal::sub_work_contract_group<T>::increment_contract_count
 (
     std::int64_t current
 ) requires (mode == work_contract_mode::blocking)
 {
-    invokedFlag_[current >> 6] |= ((0x8000000000000000ull) >> (current & 0x3f));
+    scheduledFlag_[current >> 6] |= ((0x8000000000000000ull) >> (current & 0x3f));
     current >>= 6;
     current += firstContractIndex_;
     std::uint64_t rootCount = 0;
@@ -481,13 +485,13 @@ inline void bcpp::system::sub_work_contract_group<T>::increment_contract_count
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::sub_work_contract_group<T>::increment_contract_count
+template <bcpp::system::internal::work_contract_mode T>
+inline void bcpp::system::internal::sub_work_contract_group<T>::increment_contract_count
 (
     std::int64_t current
 ) requires (mode == work_contract_mode::non_blocking)
 {
-    invokedFlag_[current >> 6] |= ((0x8000000000000000ull) >> (current & 0x3f));
+    scheduledFlag_[current >> 6] |= ((0x8000000000000000ull) >> (current & 0x3f));
     current >>= 6;
     current += firstContractIndex_;
     while (current)
@@ -496,12 +500,12 @@ inline void bcpp::system::sub_work_contract_group<T>::increment_contract_count
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
+template <bcpp::system::internal::work_contract_mode T>
 template <std::uint64_t N>
-inline std::uint64_t bcpp::system::sub_work_contract_group<T>::select_invoked_contract_bit
+inline std::uint64_t bcpp::system::internal::sub_work_contract_group<T>::select_scheduled_contract_bit
 (
     std::uint64_t inclinationFlags,
-    std::uint64_t invokedFlags,
+    std::uint64_t scheduledFlags,
     std::uint64_t selection
 ) const
 {
@@ -515,19 +519,19 @@ inline std::uint64_t bcpp::system::sub_work_contract_group<T>::select_invoked_co
         std::uint64_t constexpr bit_mask[2]{~((1ull << bits_to_consider) - 1), ((1ull << bits_to_consider) - 1)};
 
         auto preferRight = ((inclinationFlags & 1) == 1);
-        if (auto usePreferedSide = ((invokedFlags & bit_mask[preferRight]) != 0); usePreferedSide == preferRight)
+        if (auto usePreferedSide = ((scheduledFlags & bit_mask[preferRight]) != 0); usePreferedSide == preferRight)
             selection += bits_to_consider;
         else
-            invokedFlags >>= bits_to_consider;
-        return select_invoked_contract_bit<N - 1>(inclinationFlags >> 1, invokedFlags & bit_mask[1], selection);
+            scheduledFlags >>= bits_to_consider;
+        return select_scheduled_contract_bit<N - 1>(inclinationFlags >> 1, scheduledFlags & bit_mask[1], selection);
     }
 }
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-template <bcpp::system::sub_work_contract_group<T>::inclination T_>
-inline auto bcpp::system::sub_work_contract_group<T>::decrement_contract_count
+template <bcpp::system::internal::work_contract_mode T>
+template <bcpp::system::internal::sub_work_contract_group<T>::inclination T_>
+inline auto bcpp::system::internal::sub_work_contract_group<T>::decrement_contract_count
 (
     std::int64_t parent
 ) -> std::pair<std::int64_t, std::uint64_t> 
@@ -547,9 +551,9 @@ inline auto bcpp::system::sub_work_contract_group<T>::decrement_contract_count
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
+template <bcpp::system::internal::work_contract_mode T>
 template <std::uint64_t N>
-inline std::uint64_t bcpp::system::sub_work_contract_group<T>::select_contract
+inline std::uint64_t bcpp::system::internal::sub_work_contract_group<T>::select_contract
 (
     std::uint64_t & inclinationFlags,
     std::uint64_t parent
@@ -575,8 +579,8 @@ inline std::uint64_t bcpp::system::sub_work_contract_group<T>::select_contract
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline bool bcpp::system::sub_work_contract_group<T>::execute_next_contract
+template <bcpp::system::internal::work_contract_mode T>
+inline bool bcpp::system::internal::sub_work_contract_group<T>::execute_next_contract
 (
     std::uint64_t inclinationFlags
 ) 
@@ -595,17 +599,17 @@ inline bool bcpp::system::sub_work_contract_group<T>::execute_next_contract
         // select parent node in heap
         parent = (parent < firstContractIndex_) ? select_contract<1>(inclinationFlags, parent) : parent;
         // select bit which represents the contract to execute
-        auto invokedFlagsIndex = (parent - firstContractIndex_);
-        auto & invokedFlags = invokedFlag_[invokedFlagsIndex];
+        auto scheduledFlagsIndex = (parent - firstContractIndex_);
+        auto & scheduledFlags = scheduledFlag_[scheduledFlagsIndex];
         while (true)
         {
-            auto expected = invokedFlags.load();
-            auto contractIndex = select_invoked_contract_bit<6>(inclinationFlags, expected, 0);
+            auto expected = scheduledFlags.load();
+            auto contractIndex = select_scheduled_contract_bit<6>(inclinationFlags, expected, 0);
             auto bit = (0x8000000000000000ull >> contractIndex);
             expected |= bit;
-            if (invokedFlags.compare_exchange_strong(expected, expected & ~bit))
+            if (scheduledFlags.compare_exchange_strong(expected, expected & ~bit))
             {
-                process_contract((invokedFlagsIndex * 64) + contractIndex);
+                process_contract((scheduledFlagsIndex * 64) + contractIndex);
                 return true;
             }
         }
@@ -615,22 +619,22 @@ inline bool bcpp::system::sub_work_contract_group<T>::execute_next_contract
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-inline void bcpp::system::sub_work_contract_group<T>::process_contract
+template <bcpp::system::internal::work_contract_mode T>
+inline void bcpp::system::internal::sub_work_contract_group<T>::process_contract
 (
     std::int64_t contractId
 )
 {
     auto & contract = contracts_[contractId];
     auto & flags = contract.flags_;
-    if ((++flags & contract::surrender_flag) != contract::surrender_flag)
+    if ((++flags & contract::release_flag) != contract::release_flag)
     {
         contract.work_();
-        if (((flags -= contract::execute_flag) & contract::invoke_flag) == contract::invoke_flag)
+        if (((flags -= contract::execute_flag) & contract::schedule_flag) == contract::schedule_flag)
             increment_contract_count(contractId);
     }
     else
     {
-        process_surrender(contractId);
+        process_release(contractId);
     }
 }
