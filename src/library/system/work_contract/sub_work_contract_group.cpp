@@ -2,17 +2,17 @@
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-void bcpp::system::sub_work_contract_group<T>::process_surrender
+template <bcpp::system::internal::work_contract_mode T>
+void bcpp::system::internal::sub_work_contract_group<T>::process_release
 (
     std::int64_t contractId
 )
 {
     auto & contract = contracts_[contractId];
-    if (contract.surrender_)
-        std::exchange(contract.surrender_, nullptr)();
+    if (contract.release_)
+        std::exchange(contract.release_, nullptr)();
     contract.work_ = nullptr;
-    surrenderToken_[contractId] = {};
+    releaseToken_[contractId] = {};
 
     availableFlag_[contractId >> 6] |= ((0x8000000000000000ull) >> (contractId & 63));
     contractId >>= 6;
@@ -26,8 +26,8 @@ void bcpp::system::sub_work_contract_group<T>::process_surrender
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-bcpp::system::sub_work_contract_group<T>::surrender_token::surrender_token
+template <bcpp::system::internal::work_contract_mode T>
+bcpp::system::internal::sub_work_contract_group<T>::release_token::release_token
 (
     sub_work_contract_group * workContractGroup
 ):
@@ -37,8 +37,8 @@ bcpp::system::sub_work_contract_group<T>::surrender_token::surrender_token
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-bool bcpp::system::sub_work_contract_group<T>::surrender_token::invoke
+template <bcpp::system::internal::work_contract_mode T>
+bool bcpp::system::internal::sub_work_contract_group<T>::release_token::schedule
 (
     work_contract_type const & workContract
 )
@@ -46,7 +46,7 @@ bool bcpp::system::sub_work_contract_group<T>::surrender_token::invoke
     std::lock_guard lockGuard(mutex_);
     if (auto workContractGroup = std::exchange(workContractGroup_, nullptr); workContractGroup != nullptr)
     {
-        workContractGroup->surrender(workContract);
+        workContractGroup->release(workContract);
         return true;
     }
     return false;
@@ -54,8 +54,8 @@ bool bcpp::system::sub_work_contract_group<T>::surrender_token::invoke
 
 
 //=============================================================================
-template <bcpp::system::work_contract_mode T>
-void bcpp::system::sub_work_contract_group<T>::surrender_token::orphan
+template <bcpp::system::internal::work_contract_mode T>
+void bcpp::system::internal::sub_work_contract_group<T>::release_token::orphan
 (
 )
 {
@@ -65,7 +65,7 @@ void bcpp::system::sub_work_contract_group<T>::surrender_token::orphan
 
 
 //=============================================================================
-namespace bcpp::system
+namespace bcpp::system::internal
 {
     template class sub_work_contract_group<work_contract_mode::blocking>;
     template class sub_work_contract_group<work_contract_mode::non_blocking>;
