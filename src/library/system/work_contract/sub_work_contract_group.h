@@ -12,6 +12,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <concepts>
 
 
 namespace bcpp::system 
@@ -25,21 +26,15 @@ namespace bcpp::system
 
         template <work_contract_mode T>
         class sub_work_contract_group :
-            non_copyable
+            non_copyable,
+            non_movable
         {
         public:
 
             static auto constexpr mode = T;
             using work_contract_type = work_contract<mode>;
 
-
             class release_token;
-
-            sub_work_contract_group() = default;
-
-            sub_work_contract_group(sub_work_contract_group &&);
-
-            sub_work_contract_group & operator = (sub_work_contract_group &&) = delete;
 
             sub_work_contract_group
             (
@@ -56,13 +51,13 @@ namespace bcpp::system
 
             work_contract_type create_contract
             (
-                std::function<void()>
+                std::invocable auto &&
             );
 
             work_contract_type create_contract
             (
-                std::function<void()>,
-                std::function<void()>
+                std::invocable auto &&,
+                std::invocable auto &&
             );
 
             bool execute_next_contract
@@ -84,9 +79,9 @@ namespace bcpp::system
 
             struct contract
             {
-                static auto constexpr release_flag    = 0x00000004;
-                static auto constexpr execute_flag      = 0x00000002;
-                static auto constexpr schedule_flag       = 0x00000001;
+                static auto constexpr release_flag  = 0x00000004;
+                static auto constexpr execute_flag  = 0x00000002;
+                static auto constexpr schedule_flag = 0x00000001;
             
                 std::function<void()>       work_;
                 std::function<void()>       release_;
@@ -286,26 +281,6 @@ inline bcpp::system::internal::sub_work_contract_group<T>::sub_work_contract_gro
 
 //=============================================================================
 template <bcpp::system::internal::work_contract_mode T>
-inline bcpp::system::internal::sub_work_contract_group<T>::sub_work_contract_group
-(
-    sub_work_contract_group && other
-) :
-    capacity_(other.capacity_),
-    invocationCounter_(std::move(other.invocationCounter_)),
-    scheduledFlag_(std::move(other.scheduledFlag_)),
-    availableCounter_(std::move(other.availableCounter_)),
-    availableFlag_(std::move(other.availableFlag_)),
-    contracts_(std::move(other.contracts_)),
-    releaseToken_(std::move(other.releaseToken_)),
-    waitableState_(std::move(other.waitableState_)),
-    firstContractIndex_(other.firstContractIndex_)
-{
-    other.stopped_ = true;
-}
-
-
-//=============================================================================
-template <bcpp::system::internal::work_contract_mode T>
 inline bcpp::system::internal::sub_work_contract_group<T>::~sub_work_contract_group
 (
 )
@@ -333,10 +308,10 @@ inline void bcpp::system::internal::sub_work_contract_group<T>::stop
 template <bcpp::system::internal::work_contract_mode T>
 inline auto bcpp::system::internal::sub_work_contract_group<T>::create_contract
 (
-    std::function<void()> function
+    std::invocable auto && workFunction
 ) -> work_contract_type
 {
-    return create_contract(function, nullptr);
+    return create_contract(std::forward<decltype(workFunction)>(workFunction), +[](){});
 }
 
 
@@ -344,18 +319,17 @@ inline auto bcpp::system::internal::sub_work_contract_group<T>::create_contract
 template <bcpp::system::internal::work_contract_mode T>
 inline auto bcpp::system::internal::sub_work_contract_group<T>::create_contract
 (
-    std::function<void()> function,
-    std::function<void()> release
+    std::invocable auto && workFunction,
+    std::invocable auto && releaseFunction
 ) -> work_contract_type
 {
-
     std::uint32_t contractId = get_available_contract();
     if (contractId == ~0)
         return {}; // no free contracts
     auto & contract = contracts_[contractId];
     contract.flags_ = 0;
-    contract.work_ = function;
-    contract.release_ = release;
+    contract.work_ = std::forward<decltype(workFunction)>(workFunction);
+    contract.release_ = std::forward<decltype(releaseFunction)>(releaseFunction);
     auto releaseToken = releaseToken_[contractId] = std::make_shared<release_token>(this);
     return {this, releaseToken, contractId};
 }

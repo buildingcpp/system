@@ -300,8 +300,8 @@ int main
     using namespace std::chrono;
 
     static auto constexpr testDuration = 10s;
-    static auto constexpr numConcurrentTasks = 256;
-    static auto constexpr maxTaskCapacity = 1024;
+    static auto constexpr numConcurrentTasks = 1 << 8;
+    static auto constexpr maxTaskCapacity = numConcurrentTasks;
 
     auto run_test = []<typename T>
     (
@@ -310,6 +310,12 @@ int main
     )
     {
         static auto constexpr max_threads = 10;
+
+        std::cout << "work contract\n";
+        std::cout << "task = " << title << "\n";
+        std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
+        for (auto i = 1; i <= max_threads; ++i)
+            work_contract_test(i + 1, testDuration, numConcurrentTasks, maxTaskCapacity, task);
 
         std::cout << "TBB concurrent_queue\n";
         std::cout << "task = " << title << "\n";
@@ -322,12 +328,6 @@ int main
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
         for (auto i = 1; i <= max_threads; ++i)
             mpmc_test(i + 1, testDuration, numConcurrentTasks, maxTaskCapacity, task);
-
-        std::cout << "work contract\n";
-        std::cout << "task = " << title << "\n";
-        std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
-        for (auto i = 1; i <= max_threads; ++i)
-            work_contract_test(i + 1, testDuration, numConcurrentTasks, maxTaskCapacity, task);
 
     };
 

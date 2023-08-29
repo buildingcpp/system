@@ -1,6 +1,7 @@
 #pragma once
 
 #include "./work_contract_mode.h"
+#include <include/non_copyable.h>
 
 #include <atomic>
 #include <cstdint>
@@ -17,7 +18,8 @@ namespace bcpp::system
 
 
         template <work_contract_mode T>
-        class work_contract
+        class work_contract :
+            non_copyable
         {
         public:
 
@@ -29,11 +31,6 @@ namespace bcpp::system
             work_contract(work_contract &&);
             work_contract & operator = (work_contract &&);
 
-            work_contract(work_contract const &) = delete;
-            work_contract & operator = (work_contract const &) = delete;
-
-            void operator()();
-
             void schedule();
 
             bool release();
@@ -42,7 +39,6 @@ namespace bcpp::system
 
             explicit operator bool() const;
 
-            id_type get_id() const;
 
         private:
 
@@ -54,6 +50,8 @@ namespace bcpp::system
                 std::shared_ptr<typename sub_work_contract_group<T>::release_token>,
                 id_type
             );
+
+            id_type get_id() const;
 
             sub_work_contract_group<T> *   owner_{};
 
@@ -152,16 +150,6 @@ inline void bcpp::system::internal::work_contract<T>::schedule
 )
 {
     owner_->schedule(*this);
-}
-
-
-//=============================================================================
-template <bcpp::system::internal::work_contract_mode T>
-inline void bcpp::system::internal::work_contract<T>::operator()
-(
-)
-{
-    schedule();
 }
 
 
