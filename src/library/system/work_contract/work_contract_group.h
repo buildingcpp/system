@@ -14,6 +14,7 @@
 #include <functional>
 #include <concepts>
 
+#include <iostream>
 
 namespace bcpp::system
 {
@@ -67,7 +68,6 @@ namespace bcpp::system
             std::atomic<std::uint64_t>                  counter_;
             std::shared_ptr<waitable_state>             waitableState_;
             std::array<sub_work_contract_group_type, fold> workContractGroup_;
-
 
             template <std::size_t ... N>
             decltype(workContractGroup_) initialize_work_contract_group_array
@@ -166,12 +166,11 @@ inline void bcpp::system::internal::work_contract_group<T>::execute_next_contrac
 (
 )
 {
-    static thread_local std::size_t counter = 0;
-    static std::atomic<std::size_t> stride_ = 1;
-    static thread_local std::size_t stride = 1;// TODO ((stride_ += 2) % fold_mask);
-    static thread_local std::uint64_t tls_inclinationFlags[fold];
+    static thread_local std::uint64_t counter = 0;
+    static thread_local std::array<std::uint64_t, fold> tls_inclinationFlags;
+
     for (auto i = 0; i < fold; ++i)
-        if (auto index = ((counter += stride) & fold_mask); workContractGroup_[index].execute_next_contract(tls_inclinationFlags[index]++)) 
+        if (auto index = (counter++ & fold_mask); workContractGroup_[index].execute_next_contract(tls_inclinationFlags[index]++))
             return;
 }
 

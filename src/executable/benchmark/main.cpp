@@ -301,7 +301,7 @@ int main
 
     static auto constexpr testDuration = 10s;
     static auto constexpr numConcurrentTasks = 1 << 8;
-    static auto constexpr maxTaskCapacity = numConcurrentTasks;
+    static auto constexpr maxTaskCapacity = 1 << 10;
 
     auto run_test = []<typename T>
     (
@@ -314,25 +314,25 @@ int main
         std::cout << "TBB concurrent_queue\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
-        for (auto i = 1; i <= max_threads; ++i)
-            tbb_test(i + 1, testDuration, numConcurrentTasks, maxTaskCapacity, task);
+        for (auto i = 2; i <= max_threads; ++i)
+            tbb_test(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
 
         std::cout << "moodycamel ConcurrentQueue\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
-        for (auto i = 1; i <= max_threads; ++i)
-            mpmc_test(i + 1, testDuration, numConcurrentTasks, maxTaskCapacity, task);
+        for (auto i = 2; i <= max_threads; ++i)
+            mpmc_test(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
 
         std::cout << "work contract\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
-        for (auto i = 1; i <= max_threads; ++i)
-            work_contract_test(i + 1, testDuration, numConcurrentTasks, maxTaskCapacity, task);
+        for (auto i = 2; i <= max_threads; ++i)
+            work_contract_test(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
 
     };
 
     run_test(+[](){}, "maximum contention");
-    run_test(seive<100>, "heavy contention");
+    run_test(seive<100>, "high contention");
     run_test(seive<300>, "medium contention");
     run_test(seive<1000>, "low contention");
 
