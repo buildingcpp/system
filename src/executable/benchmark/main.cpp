@@ -18,6 +18,8 @@
 
 using namespace bcpp::system;
 
+int cores[] = {0,4,8,12,16,20,24,28,32,33};
+
 
 auto gather_stats
 (
@@ -75,10 +77,11 @@ auto tbb_test
     std::vector<std::size_t> perThreadTaskCount(numWorkerThreads);
     std::vector<std::size_t> taskExecutionCount(numConcurrentTasks);
     std::size_t thread_local tlsThreadIndex;
+    bool volatile start = false;
+    bool volatile end = false;
 
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(numWorkerThreads);
     auto index = 0;
-    int cores[] = {0,2,4,6,8,10,12,14,16,18,20};
     for (auto & thread : threads)
     {
         thread.cpuId_ = cores[index];
@@ -87,7 +90,9 @@ auto tbb_test
                     auto const & stopToken
                 ) mutable
                 {
-                    while (!stopToken.stop_requested())
+                    while ((!stopToken.stop_requested()) && (!start))
+                        ;
+                    while ((!stopToken.stop_requested()) && (!end))
                     {
                         work_pair p;
                         if (queue.try_pop(p))
@@ -101,15 +106,17 @@ auto tbb_test
                 };
         ++index;
     }
-    bcpp::system::thread_pool threadPool({.threads_ = threads});
+    bcpp::system::thread_pool threadPool(threads);
 
     for (auto i = 0; i < numConcurrentTasks; ++i)
         queue.push({i, task});
 
     // start test
     auto startTime = std::chrono::system_clock::now();
+    start = true;
     // wait for duration of test
     std::this_thread::sleep_for(testDuration);
+    end = true;
     // stop worker threads
     threadPool.stop(bcpp::system::synchronization_mode::async);
     // wait for all threads to exit
@@ -147,10 +154,11 @@ auto mpmc_test
     std::vector<std::size_t> perThreadTaskCount(numWorkerThreads);
     std::vector<std::size_t> taskExecutionCount(numConcurrentTasks);
     std::size_t thread_local tlsThreadIndex;
+    bool volatile start = false;
+    bool volatile end = false;
 
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(numWorkerThreads);
     auto index = 0;
-    int cores[] = {0,2,4,6,8,10,12,14,16,18,20};
     for (auto & thread : threads)
     {
         thread.cpuId_ = cores[index];
@@ -158,8 +166,10 @@ auto mpmc_test
                 (
                     auto const & stopToken
                 ) mutable
-                {
-                    while (!stopToken.stop_requested())
+                {                    
+                    while ((!stopToken.stop_requested()) && (!start))
+                        ;
+                    while ((!stopToken.stop_requested()) && (!end))
                     {
                         work_pair p;
                         if (queue.try_dequeue(p))
@@ -174,7 +184,7 @@ auto mpmc_test
                 };
         ++index;
     }
-    bcpp::system::thread_pool threadPool({.threads_ = threads});
+    bcpp::system::thread_pool threadPool(threads);
 
     for (auto i = 0; i < numConcurrentTasks; ++i)
         while (!queue.enqueue({i, task}))
@@ -182,8 +192,10 @@ auto mpmc_test
 
     // start test
     auto startTime = std::chrono::system_clock::now();
+    start = true;
     // wait for duration of test
     std::this_thread::sleep_for(testDuration);
+    end = true;
     // stop worker threads
     threadPool.stop(bcpp::system::synchronization_mode::async);
     // wait for all threads to exit
@@ -204,7 +216,7 @@ auto mpmc_test
 
 
 //=============================================================================
-template <typename T>
+template <typename W, typename T>
 auto work_contract_test
 (
     std::size_t numWorkerThreads,
@@ -215,13 +227,15 @@ auto work_contract_test
 )
 {
     // contruct work contract group
-    work_contract_group workContractGroup(maxTaskCapacity);
-    std::vector<work_contract> workContracts(numConcurrentTasks);
+    W workContractGroup(maxTaskCapacity);
+    std::vector<typename W::work_contract_type> workContracts(numConcurrentTasks);
 
     // containers for gathering stats during test
     std::vector<std::size_t> perThreadTaskCount(numWorkerThreads);
     std::vector<std::size_t> taskExecutionCount(numConcurrentTasks);
     std::size_t thread_local tlsThreadIndex;
+    bool volatile start = false;
+    bool volatile end = false;
 
     // create work contracts
     for (auto i = 0; i < numConcurrentTasks; ++i)
@@ -248,7 +262,6 @@ auto work_contract_test
     // ensure that each thread is on its own cpu for the sake of this test
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(numWorkerThreads);
     auto index = 0;
-    int cores[] = {0,2,4,6,8,10,12,14,16,18,20};
 
     for (auto i = 0; i < numWorkerThreads; ++i)
     {
@@ -259,18 +272,27 @@ auto work_contract_test
                 ) mutable
                 {
                     tlsThreadIndex = threadIndex;
-                    while (!stopToken.stop_requested())
-                        workContractGroup.execute_next_contract();
+                    while ((!stopToken.stop_requested()) && (!start))
+                        ;
+                    while ((!stopToken.stop_requested()) && (!end))
+                    {
+                        if constexpr (std::is_same_v<W, blocking_work_contract_group>)
+                            workContractGroup.execute_next_contract(std::chrono::milliseconds(1));
+                        else
+                            workContractGroup.execute_next_contract();
+                    }
                 };
     }
-    bcpp::system::thread_pool threadPool({.threads_ = threads});
+    bcpp::system::thread_pool threadPool(threads);
 
     // start test
     auto startTime = std::chrono::system_clock::now();
+    start = true;
     // wait for duration of test
     std::this_thread::sleep_for(testDuration);
 
     // stop worker threads
+    end = true;
     threadPool.stop(synchronization_mode::async);
     // wait for all threads to exit
     threadPool.wait_stop_complete();
@@ -299,7 +321,7 @@ int main
 {   
     using namespace std::chrono;
 
-    static auto constexpr testDuration = 10s;
+    static auto constexpr testDuration = 1s;
     static auto constexpr numConcurrentTasks = 1 << 8;
     static auto constexpr maxTaskCapacity = 1 << 10;
 
@@ -327,8 +349,13 @@ int main
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
         for (auto i = 2; i <= max_threads; ++i)
-            work_contract_test(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
+            work_contract_test<work_contract_group>(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
 
+        std::cout << "blocking work contract\n";
+        std::cout << "task = " << title << "\n";
+        std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
+        for (auto i = 2; i <= max_threads; ++i)
+            work_contract_test<blocking_work_contract_group>(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
     };
 
     run_test(+[](){}, "maximum contention");

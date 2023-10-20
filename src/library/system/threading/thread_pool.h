@@ -35,14 +35,11 @@ namespace bcpp::system
             std::optional<cpu_id>                           cpuId_;
         };
 
-        struct configuration
-        {
-            std::vector<thread_configuration>   threads_;
-        };
-
+        thread_pool() = default;
+        
         thread_pool
         (
-            configuration const &
+            std::vector<thread_configuration> const &
         );
 
         void stop();

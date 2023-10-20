@@ -40,9 +40,9 @@ namespace
 //=============================================================================
 bcpp::system::thread_pool::thread_pool
 (
-    configuration const & config
+    std::vector<thread_configuration> const & threadConfigurations
 ):
-    threads_(config.threads_.size()),
+    threads_(threadConfigurations.size()),
     threadCount_(std::make_shared<std::atomic<std::size_t>>(0)),
     mutex_(std::make_shared<std::mutex>()),
     conditionVariable_(std::make_shared<std::condition_variable>())
@@ -50,7 +50,7 @@ bcpp::system::thread_pool::thread_pool
     auto index = 0;
     for (auto & thread : threads_)
     {
-        thread = std::jthread([config = config.threads_[index], threadCount = threadCount_, mutex = mutex_, conditionVariable = conditionVariable_]
+        thread = std::jthread([config = threadConfigurations[index], threadCount = threadCount_, mutex = mutex_, conditionVariable = conditionVariable_]
                 (
                     std::stop_token stopToken
                 )
@@ -86,7 +86,7 @@ void bcpp::system::thread_pool::stop
     // issue terminate to all worker threads
 )
 {
-    stop(synchronization_mode::async);
+    stop(synchronization_mode::blocking);
 }
 
 
