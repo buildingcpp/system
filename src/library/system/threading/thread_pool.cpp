@@ -40,6 +40,18 @@ namespace
 //=============================================================================
 bcpp::system::thread_pool::thread_pool
 (
+    std::vector<thread_configuration> const & threadConfigurations,
+    synchronization_mode stopMode
+):
+    thread_pool(threadConfigurations)
+{
+    stopMode_ = stopMode;
+}
+
+
+//=============================================================================
+bcpp::system::thread_pool::thread_pool
+(
     std::vector<thread_configuration> const & threadConfigurations
 ):
     threads_(threadConfigurations.size()),
@@ -81,12 +93,21 @@ bcpp::system::thread_pool::thread_pool
 
 
 //=============================================================================
+bcpp::system::thread_pool::~thread_pool
+(
+)
+{
+    stop();
+}
+
+
+//=============================================================================
 void bcpp::system::thread_pool::stop
 (
     // issue terminate to all worker threads
 )
 {
-    stop(synchronization_mode::blocking);
+    stop(stopMode_);
 }
 
 
