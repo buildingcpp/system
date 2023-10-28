@@ -19,6 +19,15 @@
 using namespace bcpp::system;
 
 
+// it might look a bit odd to hard code the cpus to use in the benchmark
+// but one of my test machines has a blend of different cpus and I can't seem
+// to disable hyperthreading on that machine via the bios nor the terminal.
+// This made ensuring that the benchmark is running on the preferred physical cores 
+// a bit difficult so I just did it this way until I have time to write a tool
+// to dynamically figure out the optimal cores to use.
+int cores[] = {0,2,4,6,8,10,12,14,16,18,20};
+
+
 auto gather_stats
 (
     std::span<std::size_t> const input
@@ -78,7 +87,6 @@ auto tbb_test
 
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(numWorkerThreads);
     auto index = 0;
-    int cores[] = {0,2,4,6,8,10,12,14,16,18,20};
     for (auto & thread : threads)
     {
         thread.cpuId_ = cores[index];
@@ -150,7 +158,6 @@ auto mpmc_test
 
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(numWorkerThreads);
     auto index = 0;
-    int cores[] = {0,2,4,6,8,10,12,14,16,18,20};
     for (auto & thread : threads)
     {
         thread.cpuId_ = cores[index];
@@ -248,7 +255,6 @@ auto work_contract_test
     // ensure that each thread is on its own cpu for the sake of this test
     std::vector<bcpp::system::thread_pool::thread_configuration> threads(numWorkerThreads);
     auto index = 0;
-    int cores[] = {0,2,4,6,8,10,12,14,16,18,20};
 
     for (auto i = 0; i < numWorkerThreads; ++i)
     {
@@ -299,9 +305,9 @@ int main
 {   
     using namespace std::chrono;
 
-    static auto constexpr testDuration = 10s;
+    static auto constexpr testDuration = 1s;
     static auto constexpr numConcurrentTasks = 1 << 8;
-    static auto constexpr maxTaskCapacity = 1 << 10;
+    static auto constexpr maxTaskCapacity = 1 << 8;
 
     auto run_test = []<typename T>
     (
@@ -310,7 +316,7 @@ int main
     )
     {
         static auto constexpr max_threads = 10;
-
+/*
         std::cout << "TBB concurrent_queue\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
@@ -322,7 +328,7 @@ int main
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
         for (auto i = 2; i <= max_threads; ++i)
             mpmc_test(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
-
+*/
         std::cout << "work contract\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
@@ -338,4 +344,5 @@ int main
 
     return 0;
 }
+
 

@@ -1,3 +1,5 @@
 add_subdirectory(blocking)
 add_subdirectory(non_blocking)
 add_subdirectory(repeated_execution)
+add_subdirectory(demo)
+add_subdirectory(async_delete)
