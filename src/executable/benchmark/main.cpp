@@ -18,8 +18,6 @@
 
 using namespace bcpp::system;
 
-int cores[] = {0,4,8,12,16,20,24,28,32,33};
-
 
 // it might look a bit odd to hard code the cpus to use in the benchmark
 // but one of my test machines has a blend of different cpus and I can't seem
