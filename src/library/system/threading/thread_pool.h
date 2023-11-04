@@ -35,15 +35,20 @@ namespace bcpp::system
             std::optional<cpu_id>                           cpuId_;
         };
 
-        struct configuration
-        {
-            std::vector<thread_configuration>   threads_;
-        };
+        thread_pool() = default;
 
         thread_pool
         (
-            configuration const &
+            std::vector<thread_configuration> const &,
+            synchronization_mode
         );
+
+        thread_pool
+        (
+            std::vector<thread_configuration> const &
+        );
+
+        ~thread_pool();
 
         void stop();
 
@@ -58,11 +63,14 @@ namespace bcpp::system
 
     private:
     
-        std::vector<std::jthread>   threads_;
+        synchronization_mode                        stopMode_{synchronization_mode::blocking};
+
+        std::vector<std::jthread>                   threads_;
 
         std::shared_ptr<std::atomic<std::size_t>>   threadCount_;
 
         std::shared_ptr<std::mutex>                 mutex_;
+        
         std::shared_ptr<std::condition_variable>    conditionVariable_;
     };
     

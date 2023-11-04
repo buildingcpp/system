@@ -5,6 +5,7 @@
 #include <map>
 #include <functional>
 #include <thread>
+#include <cmath>
 
 #include <include/spsc_fixed_queue.h>
 #include <library/system.h>
