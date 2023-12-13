@@ -7,4 +7,5 @@ add_executable(async_delete
 target_link_libraries(async_delete 
 PRIVATE
     system
+    stdc++
 )
