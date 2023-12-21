@@ -40,7 +40,7 @@ int main
     std::cout << "thread count: " << numWorkerThreads << "\n";
     std::cout << "processing " << paths.size() << " test files\n";
 
-    // create a non blocking work contract group
+    // create a blocking work contract group
     bcpp::system::blocking_work_contract_group workContractGroup((paths.size() * 2));
 
     // create the thread pool
@@ -53,7 +53,7 @@ int main
     // create word streams for each of the input streams
     std::vector<std::unique_ptr<word_stream>> wordStreams;
     for (auto path : paths)
-        wordStreams.push_back(std::make_unique<word_stream>(path, 4096, workContractGroup));
+        wordStreams.push_back(std::make_unique<word_stream>(path, 8192, workContractGroup));
 
     // start the test
     auto start = std::chrono::system_clock::now();
@@ -65,8 +65,8 @@ int main
     // wait for word stream to be completed
     for (auto & wordStream : wordStreams)
     {
-        std::cout << wordStream->get_path() << " done\n";
         wordStream->join();
+        std::cout << wordStream->get_path() << " completed\n";
     }
 
     // end test and calculate results
