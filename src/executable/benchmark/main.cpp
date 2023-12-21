@@ -357,13 +357,13 @@ int main
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
         for (auto i = 2; i <= max_threads; ++i)
             work_contract_test<work_contract_group>(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
-
+/*
         std::cout << "blocking work contract\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
         for (auto i = 2; i <= max_threads; ++i)
             work_contract_test<blocking_work_contract_group>(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
-    };
+*/    };
 
     run_test(+[](){}, "maximum contention");
     run_test(seive<100>, "high contention");
