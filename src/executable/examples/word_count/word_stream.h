@@ -1,7 +1,5 @@
 #pragma once
 
-#include "./packet_queue.h"
-
 #include <library/system.h>
 
 #include <cstddef>
@@ -20,7 +18,8 @@ public:
     word_stream
     (
         std::filesystem::path,
-        std::uint64_t,
+        std::uint32_t,
+        std::uint32_t,
         bcpp::system::blocking_work_contract_group &
     );
 
@@ -36,9 +35,9 @@ public:
 
 private:
 
-    void read_packet
+    void enqueue_packet
     (
-        std::uint64_t
+        std::uint32_t
     );
 
     void process_next_packet();
@@ -46,16 +45,21 @@ private:
     void mark_complete();
 
     std::filesystem::path                   path_;
-    packet_queue                            packetQueue_;
     std::ifstream                           inputStream_;
     bcpp::system::blocking_work_contract    readPacketContract_;
+    bcpp::system::blocking_work_contract    processPacketContract_;
     std::atomic<std::uint64_t>              totalWords_{0};
     std::atomic<std::uint64_t>              bytesProcessed_{0};
-    bool volatile                           eof_{false};
-    bool volatile                           complete_{false};
+    std::atomic<std::uint64_t>              streamSize_{0};
 
     std::condition_variable                 conditionVariable_;
     std::mutex                              mutex_;
+
+    std::vector<std::vector<char>>          queue_;
+    std::atomic<std::size_t>                enqueCounter_{0};
+    std::atomic<std::size_t>                dequeCounter_{0};
+    std::size_t                             capacity_{0};
+    std::size_t                             capacityMask_{0};
 
     char prev_{' '};
 };
@@ -65,15 +69,27 @@ private:
 inline word_stream::word_stream
 (
     std::filesystem::path path,
-    std::uint64_t blockSize,
+    std::uint32_t maxPacketSize,
+    std::uint32_t maxPacketQueueCapacity,
     bcpp::system::blocking_work_contract_group & workContractGroup
 ):
     path_(path),
-    packetQueue_(32, workContractGroup.create_contract([this](){this->process_next_packet();})),
-    readPacketContract_(workContractGroup.create_contract([this, blockSize](){this->read_packet(blockSize);}))
+    processPacketContract_(workContractGroup.create_contract([this](){this->process_next_packet();})),
+    readPacketContract_(workContractGroup.create_contract([this, maxPacketSize](){this->enqueue_packet(maxPacketSize);}))
 {
-    complete_ = std::filesystem::is_empty(path);
+    // ensure that queue capacity is a power of two
+    auto i = 1;
+    while (i < maxPacketQueueCapacity)
+        i <<= 1;
+    capacity_ = i;
+    capacityMask_ = capacity_ - 1;
+    queue_.resize(capacity_);
+
     inputStream_ = std::ifstream(path, std::ios_base::in | std::ios_base::binary);
+    if (inputStream_.is_open())
+        streamSize_ = std::filesystem::file_size(path_);
+    else
+        std::cerr << "word_stream:: failed to open path = " << path_ << "\n";
 }
 
 
@@ -95,7 +111,7 @@ inline void word_stream::join
 )
 {
     std::unique_lock uniqueLock(mutex_);
-    conditionVariable_.wait(uniqueLock, [&](){return complete_;}); 
+    conditionVariable_.wait(uniqueLock, [&](){return (bytesProcessed_ >= streamSize_);}); 
 }
 
 
@@ -129,29 +145,35 @@ inline std::filesystem::path word_stream::get_path
 
 
 //=============================================================================
-inline void word_stream::read_packet
+inline void word_stream::enqueue_packet
 (
     // load next packet from the input stream and queue it for asynchronous processing
-    std::uint64_t blockSize
+    std::uint32_t maxPacketSize
 )
 {
-    if (!packetQueue_.full())
+    auto enqueCounter = enqueCounter_.load();
+    auto queueSpace = capacity_ - (enqueCounter - dequeCounter_.load());
+    if (queueSpace > 0)
     {
         // load another packet and queue it for processing
-        std::vector<char> packet(blockSize);
-        inputStream_.read(packet.data(), blockSize);
-        packet.resize(inputStream_.gcount());
-        packetQueue_.push(std::move(packet));
-
-        if (inputStream_.eof())
+        std::vector<char> packet(maxPacketSize);
+        inputStream_.read(packet.data(), maxPacketSize);
+        auto sizeRead = inputStream_.gcount();    
+        if (sizeRead == 0)
         {
-            // if the entire file has been read then end this task
-            eof_ = true;
-            readPacketContract_.release();
+            // failed to read any data 
+            if (inputStream_.eof())
+                readPacketContract_.release();
+            readPacketContract_.schedule();// re-schedule to read more packets
+            return;
         }
-        // re-schedule to read more packets
-        readPacketContract_.schedule();
-    } 
+        packet.resize(sizeRead);
+        queue_[enqueCounter & capacityMask_] = std::move(packet);
+        ++enqueCounter_;
+        if (queueSpace > 1)
+            readPacketContract_.schedule(); // re-schedule to read more packets
+        processPacketContract_.schedule(); // schedule process packet contract
+    }
 }
 
 
@@ -161,18 +183,25 @@ inline void word_stream::process_next_packet
     // pop next packet from queue and scan it for number of words
 )
 {
-    for (auto c : packetQueue_.front())
+    auto enqueCounter = enqueCounter_.load();
+    auto dequeCounter = dequeCounter_.load();
+    auto packetCount = (enqueCounter - dequeCounter);
+    if (packetCount > 0)
     {
-        if ((prev_ == ' ') && (c != ' '))
-            totalWords_++;
-        prev_ = c;
+        auto packet = std::move(queue_[dequeCounter & capacityMask_]);
+        ++dequeCounter_ ;
+        for (auto c : packet)
+        {
+            if ((prev_ == ' ') && (c != ' '))
+                totalWords_++;
+            prev_ = c;
+        }
+        if ((bytesProcessed_ += packet.size()) >= streamSize_)
+            mark_complete();
+        if (packetCount > 1)
+            processPacketContract_.schedule(); // more packets to process
+        readPacketContract_.schedule();// re-schedule to read more packets
     }
-    bytesProcessed_ += packetQueue_.front().size();
-    packetQueue_.pop();
-    if ((eof_) && (packetQueue_.empty()))
-        mark_complete();
-    // reschedule the read-packet contract just in case it wasn't scheduled due to a full queue
-    readPacketContract_.schedule();
 }
 
 
@@ -183,7 +212,7 @@ inline void word_stream::mark_complete
     // notify any waiting threads
 )
 {
+    readPacketContract_.release();
     std::unique_lock uniqueLock(mutex_);
-    complete_ = true;
     conditionVariable_.notify_all(); 
 }

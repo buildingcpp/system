@@ -41,7 +41,7 @@ int main
     std::cout << "processing " << paths.size() << " test files\n";
 
     // create a blocking work contract group
-    bcpp::system::blocking_work_contract_group workContractGroup((paths.size() * 2));
+    bcpp::system::blocking_work_contract_group workContractGroup(1 << 16);
 
     // create the thread pool
     std::vector<bcpp::system::thread_pool::thread_configuration> threadPoolConfiguration;
@@ -51,9 +51,11 @@ int main
     bcpp::system::thread_pool threadPool(threadPoolConfiguration);
 
     // create word streams for each of the input streams
+    static auto constexpr max_packet_size = ((1 << 10) * 8); // read source files in 8K packets
+    static auto constexpr max_packet_queue_capacity = 32;    // queue no more than 32 packets per stream
     std::vector<std::unique_ptr<word_stream>> wordStreams;
     for (auto path : paths)
-        wordStreams.push_back(std::make_unique<word_stream>(path, 8192, workContractGroup));
+        wordStreams.push_back(std::make_unique<word_stream>(path, max_packet_size, max_packet_queue_capacity, workContractGroup));
 
     // start the test
     auto start = std::chrono::system_clock::now();
@@ -64,10 +66,7 @@ int main
 
     // wait for word stream to be completed
     for (auto & wordStream : wordStreams)
-    {
         wordStream->join();
-        std::cout << wordStream->get_path() << " completed\n";
-    }
 
     // end test and calculate results
     auto finish = std::chrono::system_clock::now();
@@ -89,6 +88,8 @@ int main
     std::cout << "number of files processed: " << paths.size() << "\n";
     auto rate = (((double)totalBytesProcessed / (1 << 20)) / seconds);
     std::cout << "rate: " << rate << " MB per second\n";
+
+    threadPool.stop();
 
     return 0;
 }
