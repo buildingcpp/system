@@ -174,7 +174,7 @@ inline bool bcpp::system::internal::work_contract<T>::is_valid
 (
 ) const
 {
-    return ((bool)releaseToken_);
+    return ((releaseToken_) && (releaseToken_->is_valid()));
 }
 
 
