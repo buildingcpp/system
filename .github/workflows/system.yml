@@ -2,8 +2,13 @@ name: system CI
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
+  
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
 
 inputs:
   source-dir: 
@@ -17,13 +22,19 @@ inputs:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout
-    - uses: actions/checkout@v1
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        compiler: [ g++-12 ]
+        include:
+          - os: ubuntu-latest
+            compiler: g++-12
+            target: Linux
 
-    - name: cmake ..
-      run: |
-        cmake ..
-        make
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: run
         ./bin/system/repeated_execution_example
