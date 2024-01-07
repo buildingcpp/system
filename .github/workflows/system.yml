@@ -32,4 +32,8 @@ jobs:
           cd build
           cmake ..
           make
+          ./bin/system/blocking_example
+          ./bin/system/concurrent_even_number_counting
+          ./bin/system/non_blocking_example
+          ./bin/system/async_delete
           ./bin/system/repeated_execution_example
