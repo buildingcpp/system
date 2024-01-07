@@ -32,10 +32,4 @@ jobs:
           cd build
           cmake ..
           make
-          echo "$PWD"
-          ls -al
-          ls -al ./bin/
-          ls -al ./bin/system/
-
-      - name: run
-        run: ./bin/system/repeated_execution_example
+          ./bin/system/repeated_execution_example
