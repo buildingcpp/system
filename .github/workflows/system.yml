@@ -10,16 +10,6 @@ defaults:
   run:
     shell: bash
 
-inputs:
-  source-dir: 
-    default: ${{ github.workspace }}
-  build-dir:
-    default: "${{ github.workspace }}/../build"
-    requried: true
-  build-type:
-    default: 'Release'
-    required: true
-
 jobs:
   test:
     runs-on: ${{ matrix.os }}
