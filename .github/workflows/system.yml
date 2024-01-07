@@ -20,13 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-    - uses: actions/checkout@v2.0.0
+    - uses: actions/checkout@v1
 
     - name: cmake ..
-      run: cmake ..
-    
-    - name: make
-      run: make
-
-    - name: repeated_action
-      run: ./bin/system/repeated_execution_example
+      run: |
+        cmake ..
+        make
+        ./bin/system/repeated_execution_example
