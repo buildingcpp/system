@@ -16,13 +16,14 @@ inputs:
     required: true
 
 jobs:
-  build-and-test:
+  test:
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout
-      uses: actions/checkout@v2.0.0
+    - uses: actions/checkout@v2.0.0
+
     - name: cmake ..
-    run: cmake ..
+      run: cmake ..
+    
     - name: make
-    run: make
+      run: make
