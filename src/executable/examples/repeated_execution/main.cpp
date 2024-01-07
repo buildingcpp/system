@@ -34,5 +34,5 @@ int main()
     while (workContract)
         ; // stick arount until the work contract is released
 
-    return 0;
+    return -1; // temp test 
 }
