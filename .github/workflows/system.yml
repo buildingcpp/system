@@ -34,4 +34,4 @@ jobs:
           make
 
       - name: run
-        run: ./bin/system/repeated_execution_example
+        run: ../../../../bin/system/repeated_execution_example
