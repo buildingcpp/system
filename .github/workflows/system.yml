@@ -26,12 +26,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v2
 
-      - name: mkdir build
+      - name: build
         run: |
           mkdir build
           cd build
           cmake ..
           make
+          echo "$PWD"
+          ls -al
 
       - name: run
-        run: ../../../../bin/system/repeated_execution_example
+        run: ./bin/system/repeated_execution_example
