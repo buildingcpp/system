@@ -1,4 +1,4 @@
-(https://github.com/buildingcpp/system/actions/workflows/system.yml/badge.svg?branch=main)
+[<img src="https://github.com/buildingcpp/system/actions/workflows/system.yml/badge.svg?branch=main">)](<LINK>)
 
 # system
 basic low level system stuff, threads, work contracts, etc
