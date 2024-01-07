@@ -1,0 +1,21 @@
+name: system CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./src/
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2.0.0
+    run: mkdir build
+    run: cd build
+    run: cmake ..
+    run: make
