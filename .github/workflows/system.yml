@@ -27,3 +27,6 @@ jobs:
     
     - name: make
       run: make
+
+    - name: repeated_action
+      run: ./bin/system/repeated_execution_example
