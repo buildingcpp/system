@@ -201,12 +201,14 @@ namespace bcpp::system
                 sub_work_contract_group *
             );
             
-            std::mutex mutex_;
-            sub_work_contract_group * workContractGroup_{};
-
             bool schedule(work_contract_type const &);
 
             void orphan();
+
+            bool is_valid() const;
+
+            std::mutex mutable          mutex_;
+            sub_work_contract_group *   workContractGroup_{};
         };
 
     } // namespace internal

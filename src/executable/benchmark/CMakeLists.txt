@@ -8,5 +8,4 @@ PRIVATE
 target_link_libraries(benchmark 
 PRIVATE
     system
-    tbb
 )

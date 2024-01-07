@@ -64,7 +64,7 @@ bcpp::system::thread_pool::thread_pool
     {
         thread = std::jthread([config = threadConfigurations[index], threadCount = threadCount_, mutex = mutex_, conditionVariable = conditionVariable_]
                 (
-                    std::stop_token stopToken
+                    std::stop_token const & stopToken
                 )
                 {
                     thread_counter threadCounter(threadCount, mutex, conditionVariable);

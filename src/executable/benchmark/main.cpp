@@ -13,7 +13,6 @@
 #include <span>
 
 #include <library/system.h>
-#include <tbb/concurrent_queue.h>
 #include <concurrentqueue.h>
 
 using namespace bcpp::system;
@@ -65,82 +64,6 @@ std::int32_t seive
         total += (n == true);
     return total;
 };
-
-//=============================================================================
-template <typename T>
-auto tbb_test
-(
-    std::size_t numWorkerThreads,
-    std::chrono::nanoseconds testDuration,
-    std::size_t numConcurrentTasks,
-    std::size_t maxTaskCapacity,
-    T task
-)
-{
-    using work_pair = std::pair<std::int32_t, T>;
-    tbb::concurrent_queue<work_pair> queue;
-
-    // containers for gathering stats during test
-    std::vector<std::size_t> perThreadTaskCount(numWorkerThreads);
-    std::vector<std::size_t> taskExecutionCount(numConcurrentTasks);
-    std::size_t thread_local tlsThreadIndex;
-    bool volatile start = false;
-    bool volatile end = false;
-
-    std::vector<bcpp::system::thread_pool::thread_configuration> threads(numWorkerThreads);
-    auto index = 0;
-    for (auto & thread : threads)
-    {
-        thread.cpuId_ = cores[index];
-        thread.function_ = [&, threadIndex = index]
-                (
-                    auto const & stopToken
-                ) mutable
-                {
-                    while ((!stopToken.stop_requested()) && (!start))
-                        ;
-                    while ((!stopToken.stop_requested()) && (!end))
-                    {
-                        work_pair p;
-                        if (queue.try_pop(p))
-                        {
-                            p.second();
-                            taskExecutionCount[p.first]++;
-                            perThreadTaskCount[threadIndex]++;
-                            queue.push(p);
-                        }
-                    }
-                };
-        ++index;
-    }
-    bcpp::system::thread_pool threadPool(threads);
-
-    for (auto i = 0; i < numConcurrentTasks; ++i)
-        queue.push({i, task});
-
-    // start test
-    auto startTime = std::chrono::system_clock::now();
-    start = true;
-    // wait for duration of test
-    std::this_thread::sleep_for(testDuration);
-    end = true;
-    // stop worker threads
-    threadPool.stop(bcpp::system::synchronization_mode::async);
-    // wait for all threads to exit
-    threadPool.wait_stop_complete();
-
-    // test completed
-    // gather timing
-    auto stopTime = std::chrono::system_clock::now();
-    auto elapsedTime = (stopTime - startTime);
-    auto test_duration_in_sec = (double)std::chrono::duration_cast<std::chrono::nanoseconds>(elapsedTime).count() / std::nano::den;
-
-    auto [taskTotal, taskMean, taskSd, taskCv] = gather_stats(taskExecutionCount);
-    auto [threadTotal, threadMean, threadSd, threadCv] = gather_stats(perThreadTaskCount);
-
-    std::cout << (int)((taskTotal / test_duration_in_sec) / numWorkerThreads) << ", " << taskMean << "," << taskSd << ", " << 
-            std::fixed << std::setprecision(3) << taskCv << ", " << threadSd << ", " << threadCv << "\n";
-}
 
 
 //=============================================================================
@@ -339,31 +262,25 @@ int main
     )
     {
         static auto constexpr max_threads = 10;
-/*
-        std::cout << "TBB concurrent_queue\n";
-        std::cout << "task = " << title << "\n";
-        std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
-        for (auto i = 2; i <= max_threads; ++i)
-            tbb_test(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
 
         std::cout << "moodycamel ConcurrentQueue\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
         for (auto i = 2; i <= max_threads; ++i)
             mpmc_test(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
-*/
+
         std::cout << "work contract\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
         for (auto i = 2; i <= max_threads; ++i)
             work_contract_test<work_contract_group>(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
-/*
+
         std::cout << "blocking work contract\n";
         std::cout << "task = " << title << "\n";
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
         for (auto i = 2; i <= max_threads; ++i)
             work_contract_test<blocking_work_contract_group>(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
-*/    };
+    };
 
     run_test(+[](){}, "maximum contention");
     run_test(seive<100>, "high contention");

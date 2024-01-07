@@ -65,6 +65,17 @@ void bcpp::system::internal::sub_work_contract_group<T>::release_token::orphan
 
 
 //=============================================================================
+template <bcpp::system::internal::work_contract_mode T>
+bool bcpp::system::internal::sub_work_contract_group<T>::release_token::is_valid
+(
+) const
+{
+    std::lock_guard lockGuard(mutex_);
+    return ((bool)workContractGroup_);
+}
+
+
+//=============================================================================
 namespace bcpp::system::internal
 {
     template class sub_work_contract_group<work_contract_mode::blocking>;

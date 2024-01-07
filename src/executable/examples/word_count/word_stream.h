@@ -23,15 +23,14 @@ public:
         bcpp::system::blocking_work_contract_group &
     );
 
-    void start();
+    void start(){readPacketContract_.schedule();}
 
-    void join();
-
-    std::uint64_t word_count() const;
-
-    std::uint64_t bytes_processed() const;
-
-    std::filesystem::path get_path() const;
+    std::tuple<std::uint64_t, std::uint64_t> await_result() const
+    {
+        std::unique_lock uniqueLock(mutex_);
+        conditionVariable_.wait(uniqueLock, [&](){return (bytesProcessed_ >= streamSize_);}); 
+        return {totalWords_, bytesProcessed_};
+    }
 
 private:
 
@@ -42,8 +41,6 @@ private:
 
     void process_next_packet();
 
-    void mark_complete();
-
     std::filesystem::path                   path_;
     std::ifstream                           inputStream_;
     bcpp::system::blocking_work_contract    readPacketContract_;
@@ -52,8 +49,8 @@ private:
     std::atomic<std::uint64_t>              bytesProcessed_{0};
     std::atomic<std::uint64_t>              streamSize_{0};
 
-    std::condition_variable                 conditionVariable_;
-    std::mutex                              mutex_;
+    std::condition_variable mutable         conditionVariable_;
+    std::mutex mutable                      mutex_;
 
     std::vector<std::vector<char>>          queue_;
     std::atomic<std::size_t>                enqueCounter_{0};
@@ -90,57 +87,6 @@ inline word_stream::word_stream
         streamSize_ = std::filesystem::file_size(path_);
     else
         std::cerr << "word_stream:: failed to open path = " << path_ << "\n";
-}
-
-
-//=============================================================================
-inline void word_stream::start
-(
-    // trigger start of processing the stream by 
-    // scheduling the read packet contract for the first time
-)
-{
-    readPacketContract_.schedule();
-}
-
-
-//=============================================================================
-inline void word_stream::join
-(
-    // wait for the stream to be completely processed before returning
-)
-{
-    std::unique_lock uniqueLock(mutex_);
-    conditionVariable_.wait(uniqueLock, [&](){return (bytesProcessed_ >= streamSize_);}); 
-}
-
-
-//=============================================================================
-inline std::uint64_t word_stream::word_count
-(
-    // return total number of words found in the input stream
-) const
-{
-    return totalWords_;
-}
-
-
-//=============================================================================
-inline std::uint64_t word_stream::bytes_processed
-(
-    // return the total number of bytes processed from the input stream
-) const
-{
-    return bytesProcessed_;
-}
-
-
-//=============================================================================
-inline std::filesystem::path word_stream::get_path
-(
-) const
-{
-    return path_;
 }
 
 
@@ -197,22 +143,13 @@ inline void word_stream::process_next_packet
             prev_ = c;
         }
         if ((bytesProcessed_ += packet.size()) >= streamSize_)
-            mark_complete();
+        {
+            readPacketContract_.release();
+            std::unique_lock uniqueLock(mutex_);
+            conditionVariable_.notify_all(); 
+        }
         if (packetCount > 1)
             processPacketContract_.schedule(); // more packets to process
         readPacketContract_.schedule();// re-schedule to read more packets
     }
-}
-
-
-//=============================================================================
-inline void word_stream::mark_complete
-(
-    // stream has been completely processed.  
-    // notify any waiting threads
-)
-{
-    readPacketContract_.release();
-    std::unique_lock uniqueLock(mutex_);
-    conditionVariable_.notify_all(); 
 }

@@ -31,17 +31,15 @@ int main
 
     std::vector<std::filesystem::path> paths;
     for (const auto & path : std::filesystem::directory_iterator(dirPath))
-    {
         if (std::filesystem::is_regular_file(path))
             paths.push_back(path);
-    }
 
     auto numWorkerThreads = std::thread::hardware_concurrency();
     std::cout << "thread count: " << numWorkerThreads << "\n";
     std::cout << "processing " << paths.size() << " test files\n";
 
     // create a blocking work contract group
-    bcpp::system::blocking_work_contract_group workContractGroup(1 << 16);
+    bcpp::system::blocking_work_contract_group workContractGroup(paths.size() * 2);
 
     // create the thread pool
     std::vector<bcpp::system::thread_pool::thread_configuration> threadPoolConfiguration;
@@ -58,27 +56,24 @@ int main
         wordStreams.push_back(std::make_unique<word_stream>(path, max_packet_size, max_packet_queue_capacity, workContractGroup));
 
     // start the test
+    auto totalWordCount = 0ull;
+    auto totalBytesProcessed = 0ull;
     auto start = std::chrono::system_clock::now();
 
     // start each word stream
     for (auto & wordStream : wordStreams)
         wordStream->start();
 
-    // wait for word stream to be completed
     for (auto & wordStream : wordStreams)
-        wordStream->join();
+    {
+        auto [wordCount, bytesProcessed] = wordStream->await_result();
+        totalWordCount += wordCount;
+        totalBytesProcessed += bytesProcessed;
+    }
 
     // end test and calculate results
     auto finish = std::chrono::system_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(finish - start);
-
-    auto totalWordCount = 0ull;
-    auto totalBytesProcessed = 0ull;
-    for (auto const & wordStream : wordStreams)
-    {
-        totalWordCount += wordStream->word_count();
-        totalBytesProcessed += wordStream->bytes_processed();
-    }
 
     // display results
     std::cout << "word count = " << totalWordCount << "\n";
