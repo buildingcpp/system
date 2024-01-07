@@ -37,4 +37,4 @@ jobs:
         uses: actions/checkout@v2
 
       - name: run
-        ./bin/system/repeated_execution_example
+        run: ./bin/system/repeated_execution_example
