@@ -1,4 +1,4 @@
-name: system CI
+name: system
 
 on:
   pull_request:
