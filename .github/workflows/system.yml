@@ -5,6 +5,16 @@ on:
     branches:
       - main
 
+inputs:
+  source-dir: 
+    default: ${{ github.workspace }}
+  build-dir:
+    default: "${{ github.workspace }}/../build"
+    requried: true
+  build-type:
+    default: 'Release'
+    required: true
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -12,7 +22,7 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v2.0.0
-    run: mkdir build
-    run: cd build
+    - name: cmake ..
     run: cmake ..
+    - name: make
     run: make
