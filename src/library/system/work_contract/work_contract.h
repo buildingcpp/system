@@ -110,15 +110,18 @@ inline auto bcpp::system::internal::work_contract<T>::operator =
     work_contract && other
 ) -> work_contract &
 {
-    release();
+    if (this != &other)
+    {
+        release();
 
-    owner_ = other.owner_;
-    id_ = other.id_;
-    releaseToken_ = other.releaseToken_;
-    
-    other.owner_ = {};
-    other.id_ = {};
-    other.releaseToken_ = {};
+        owner_ = other.owner_;
+        id_ = other.id_;
+        releaseToken_ = other.releaseToken_;
+        
+        other.owner_ = {};
+        other.id_ = {};
+        other.releaseToken_ = {};
+    }
     return *this;
 }
 

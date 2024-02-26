@@ -101,7 +101,7 @@ inline auto bcpp::system::file_descriptor::operator =
     file_descriptor && other
 ) -> file_descriptor & 
 {
-    if (this != & other)
+    if (this != &other)
     {
         close();
         value_ = other.value_;
