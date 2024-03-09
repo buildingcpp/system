@@ -22,16 +22,10 @@ else()
     )
 endif()
 
-
 option(WORKCONTRACT_BUILD_DEMO "Build the CLI demo" ON)
 
-include("./scripts/fetch_dependencies.cmake")
-
+include("${CMAKE_SOURCE_DIR}/scripts/fetch_dependencies.cmake")
 fetch_dependency("https://github.com/buildingcpp/include.git;main")
-
-fetch_dependency("https://github.com/fmtlib/fmt.git;5f774c0aed4af6494b412cd3883e0f09295bd79d")
-fetch_dependency("https://github.com/ericniebler/range-v3.git;master")
-fetch_dependency("https://github.com/cameron314/concurrentqueue.git;master")
 
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${PROJECT_NAME})
@@ -42,4 +36,3 @@ add_subdirectory(src)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-
