@@ -23,6 +23,11 @@ jobs:
           - os: ubuntu-latest
             compiler: g++-12
             target: Linux
+        os: [macos-latest]
+        compiler: [ g++-12 ]
+        include:
+          - os: macos-latest
+            compiler: g++-12
 
     steps:
       - name: Checkout Repository
