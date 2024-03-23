@@ -1,5 +1,7 @@
 #pragma once
 
+#include <include/non_copyable.h>
+
 #include <cstdint>
 #include <utility>
 #include <unistd.h>
@@ -10,7 +12,8 @@
 namespace bcpp::system
 {
 
-    class file_descriptor
+    class file_descriptor :
+        non_copyable
     {
     public:
 
@@ -42,9 +45,6 @@ namespace bcpp::system
         bool is_valid() const;
 
     private:
-
-        file_descriptor(file_descriptor const &) = delete;
-        file_descriptor & operator = (file_descriptor const &) = delete;
 
         value_type   value_{0};
     };
