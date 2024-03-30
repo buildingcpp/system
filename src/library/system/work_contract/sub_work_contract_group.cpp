@@ -14,7 +14,7 @@ void bcpp::system::internal::sub_work_contract_group<T>::process_release
     contract.work_ = nullptr;
     releaseToken_[contractId] = {};
 
-    availableFlag_[contractId >> 6] |= ((0x8000000000000000ull) >> (contractId & 63));
+    availableFlag_[contractId >> 6].value_ |= ((0x8000000000000000ull) >> (contractId & 63));
     contractId >>= 6;
     contractId += firstContractIndex_;
     while (contractId)
