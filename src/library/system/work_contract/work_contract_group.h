@@ -33,7 +33,7 @@ namespace bcpp::system
             using work_contract_type = work_contract<mode>;
             using sub_work_contract_group_type = sub_work_contract_group<mode>;
 
-            static auto constexpr fold = 1;
+            static auto constexpr fold = 32;
             static auto constexpr fold_mask = fold - 1;
 
             work_contract_group

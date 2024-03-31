@@ -261,6 +261,7 @@ int main
         std::string title
     )
     {
+        
         static auto constexpr max_threads = 10;
 
         std::cout << "moodycamel ConcurrentQueue\n";
@@ -280,6 +281,7 @@ int main
         std::cout << "ops/s per thread, task mean, task std dev, task cv, thread std dev, thread cv\n";
         for (auto i = 2; i <= max_threads; ++i)
             work_contract_test<blocking_work_contract_group>(i, testDuration, numConcurrentTasks, maxTaskCapacity, task);
+
     };
 
     run_test(+[](){}, "maximum contention");

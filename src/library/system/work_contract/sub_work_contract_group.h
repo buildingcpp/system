@@ -129,9 +129,9 @@ namespace bcpp::system
                 std::int64_t
             ) requires (mode == work_contract_mode::non_blocking);
 
-            union alignas(8) invocation_counter
+            union alignas(64) invocation_counter
             {
-                invocation_counter():u64_(){static_assert(sizeof(*this) == sizeof(std::uint64_t));}
+                invocation_counter():u64_(){}
                 std::atomic<std::uint64_t> u64_;
                 struct parts
                 {
@@ -169,12 +169,17 @@ namespace bcpp::system
 
             std::size_t get_available_contract();
 
+            struct alignas(64) cache_aligned_atomic_uint64_t 
+            {
+                std::atomic<std::uint64_t> value_;
+            };
+
             std::uint64_t                                   capacity_;
             std::vector<invocation_counter>                 invocationCounter_;
-            std::vector<std::atomic<std::uint64_t>>         scheduledFlag_;
+            std::vector<cache_aligned_atomic_uint64_t>         scheduledFlag_;
 
             std::vector<invocation_counter>                 availableCounter_;
-            std::vector<std::atomic<std::uint64_t>>         availableFlag_;
+            std::vector<cache_aligned_atomic_uint64_t>         availableFlag_;
 
             std::vector<contract>                           contracts_;
 
@@ -247,7 +252,7 @@ inline bcpp::system::internal::sub_work_contract_group<T>::sub_work_contract_gro
         c >>= 1;
     }
     for (auto & _ : availableFlag_)
-        _ = 0xffffffffffffffffull;
+        _.value_ = 0xffffffffffffffffull;
 }
 
 
@@ -277,7 +282,7 @@ inline bcpp::system::internal::sub_work_contract_group<T>::sub_work_contract_gro
         c >>= 1;
     }
     for (auto & _ : availableFlag_)
-        _ = 0xffffffffffffffffull;
+        _.value_ = 0xffffffffffffffffull;
 }
 
 
@@ -433,10 +438,10 @@ inline std::size_t bcpp::system::internal::sub_work_contract_group<T>::get_avail
     auto & availableFlags = availableFlag_[availableFlagIndex];
     while (true)
     {
-        auto expected = availableFlags.load();
+        auto expected = availableFlags.value_.load();
         auto contractIndex = get_available_contract_bit<6>(expected, 0);
         auto bit = (0x8000000000000000ull >> contractIndex);
-        if (availableFlags.compare_exchange_strong(expected, expected & ~bit))
+        if (availableFlags.value_.compare_exchange_strong(expected, expected & ~bit))
             return ((availableFlagIndex * 64) + contractIndex);
     }
 }
@@ -449,7 +454,7 @@ inline void bcpp::system::internal::sub_work_contract_group<T>::increment_contra
     std::int64_t current
 ) requires (mode == work_contract_mode::blocking)
 {
-    scheduledFlag_[current >> 6] |= ((0x8000000000000000ull) >> (current & 0x3f));
+    scheduledFlag_[current >> 6].value_ |= ((0x8000000000000000ull) >> (current & 0x3f));
     current >>= 6;
     current += firstContractIndex_;
     std::uint64_t rootCount = 0;
@@ -467,7 +472,7 @@ inline void bcpp::system::internal::sub_work_contract_group<T>::increment_contra
     std::int64_t current
 ) requires (mode == work_contract_mode::non_blocking)
 {
-    scheduledFlag_[current >> 6] |= ((0x8000000000000000ull) >> (current & 0x3f));
+    scheduledFlag_[current >> 6].value_ |= ((0x8000000000000000ull) >> (current & 0x3f));
     current >>= 6;
     current += firstContractIndex_;
     while (current)
@@ -579,11 +584,11 @@ inline bool bcpp::system::internal::sub_work_contract_group<T>::execute_next_con
         auto & scheduledFlags = scheduledFlag_[scheduledFlagsIndex];
         while (true)
         {
-            auto expected = scheduledFlags.load();
+            auto expected = scheduledFlags.value_.load();
             auto contractIndex = select_scheduled_contract_bit<6>(inclinationFlags, expected, 0);
             auto bit = (0x8000000000000000ull >> contractIndex);
             expected |= bit;
-            if (scheduledFlags.compare_exchange_strong(expected, expected & ~bit))
+            if (scheduledFlags.value_.compare_exchange_strong(expected, expected & ~bit))
             {
                 process_contract((scheduledFlagsIndex * 64) + contractIndex);
                 return true;
