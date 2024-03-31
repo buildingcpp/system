@@ -54,4 +54,14 @@ Benchmark is run on both Intel and AMD processors and measures number of tasks p
 <img src="https://www.buildingcpp.com/images/intel_maximum_contention.png">
 
 
+**Coefficient of Variation for execution of tasks (High contention at 10 threads):**
+> Measures how evenly tasks were executed overall. With no prioritization we should expect that all tasks have the same chance of being executed.
+A **low value is more better** indicates that tasks were treated fairly. A high value suggests that there is a bias in the task selection mechanism. This measurement indicates that the mechanisms in the Moody Camel implementation which (I believe) are the source of its speed, causes a clear skew in which tasks will get processed over others. This indicates that Moody Camel ConcurrentQueue might not be a good selection for a task queue if "fairness" is required.
 
+
+<img src="https://www.buildingcpp.com/images/cv_of_tasks.png">
+
+**Coefficient of Variation for thread selection (High contention at 10 threads):**
+> Measures how evenly tasks were distributed across threads overall. It is generally assumed that all worker threads will do approximately the same amount of work throughout the test. A **low value is better** indicates that tasks were executed as expected - evenly across all threads. A high value suggests a bias which causes some threads to do less work than others. This measurement indicates that TBB has difficulty balancing work evenly across threads when contention is high (particularly on Intel) And that some worker threads are doing far less work than others.
+
+<img src="https://www.buildingcpp.com/images/cv_of_threads.png">
