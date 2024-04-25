@@ -7,11 +7,11 @@ add_library(system
 
 target_link_libraries(system 
     pthread
-    include
 )
 
 
 target_include_directories(system
 PUBLIC
     ${_system_dir}/src
+    ${_include_dir}/src
 )
