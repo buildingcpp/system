@@ -2,7 +2,7 @@
 
 #include "./cpu_id.h"
 #include "./threading/thread_pool.h"
-#include "./work_contract/work_contract_group.h"
+//#include "./work_contract/work_contract_group.h"
 
 
 namespace bcpp::system

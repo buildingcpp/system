@@ -13,12 +13,16 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
         -g
         -O0
         -march=native
+        -Wall
+        -fPIE
     )
 else()
     add_compile_options(
         -O3
         -march=native
         -g
+        -Wall
+        -fPIE
     )
 endif()
 
@@ -37,7 +41,7 @@ if ("${_scripts_src_path}" STREQUAL "")
 
     FetchContent_Declare(
         scripts
-        GIT_REPOSITORY git@github.com:buildingcpp/scripts.git
+        GIT_REPOSITORY https://github.com/buildingcpp/scripts.git
         GIT_TAG main
         SOURCE_DIR        "${CMAKE_BINARY_DIR}/scripts-src"
         BINARY_DIR        "${CMAKE_BINARY_DIR}/scripts-build"
@@ -56,8 +60,9 @@ fetch_dependency("https://github.com/buildingcpp/include.git;main")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${PROJECT_NAME})
 set(_${PROJECT_NAME}_dir ${CMAKE_CURRENT_SOURCE_DIR} CACHE STRING "")
 
-add_subdirectory(src)
-
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+add_subdirectory(src)
+

@@ -115,7 +115,7 @@ int main
                     return result;
                 }, workContractGroup));
 
-    int total;    
+    int total{0};    
     for (auto & task : tasks)
         total += task.join();
 
