@@ -2,6 +2,7 @@
 
 #include "./cpu_id.h"
 #include "./threading/thread_pool.h"
+#include "./shared_memory/shared_memory.h"
 
 
 namespace bcpp::system

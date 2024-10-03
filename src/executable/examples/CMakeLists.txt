@@ -1,7 +1,1 @@
-add_subdirectory(blocking)
-add_subdirectory(non_blocking)
-add_subdirectory(repeated_execution)
-add_subdirectory(demo)
-add_subdirectory(async_delete)
-add_subdirectory(word_count)
-add_subdirectory(concurrent_even_number_counting)
+add_subdirectory(shared_memory)
