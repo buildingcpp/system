@@ -67,6 +67,8 @@ namespace bcpp::system
             event_handlers const &
         );
 
+        shared_memory() = default;
+        
         shared_memory(shared_memory &&);
 
         shared_memory & operator = (shared_memory &&);
@@ -92,6 +94,11 @@ namespace bcpp::system
         void unlink();
 
         std::string path() const;
+
+        std::byte * begin();
+        std::byte const * begin() const;
+        std::byte * end();
+        std::byte const * end() const;
 
     private:
 

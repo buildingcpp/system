@@ -245,3 +245,39 @@ bool bcpp::system::shared_memory::is_valid
 {
     return (allocation_.data() != nullptr);
 }
+
+
+//=============================================================================
+std::byte * bcpp::system::shared_memory::begin
+(
+)
+{
+    return allocation_.data();
+}
+
+
+//=============================================================================
+std::byte const * bcpp::system::shared_memory::begin
+(
+) const
+{
+    return allocation_.data();
+}
+
+
+//=============================================================================
+std::byte * bcpp::system::shared_memory::end
+(
+)
+{
+    return (allocation_.data() + allocation_.size());
+}
+
+
+//=============================================================================
+std::byte const * bcpp::system::shared_memory::end
+(
+) const
+{
+    return (allocation_.data() + allocation_.size());
+}
