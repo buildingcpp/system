@@ -37,7 +37,7 @@ namespace bcpp::system
             std::string     path_;
             std::size_t     size_;
             io_mode         ioMode_;
-            std::size_t     mapFlags_ = {MAP_SHARED};
+            std::size_t     mmapFlags_ = {MAP_SHARED};
             unlink_policy   unlinkPolicy_{default_unlink_policy};
         };
 
@@ -45,7 +45,7 @@ namespace bcpp::system
         {
             std::string     path_;
             io_mode         ioMode_;
-            std::size_t     mapFlags_ = {MAP_SHARED};
+            std::size_t     mmapFlags_ = {MAP_SHARED};
             unlink_policy   unlinkPolicy_{default_unlink_policy};
         };
 

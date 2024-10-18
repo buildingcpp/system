@@ -21,7 +21,7 @@ int main
                 .path_ = "",
                 .size_ = 1024,
                 .ioMode_ = io_mode::read_write,
-                .mapFlags_ = MAP_SHARED,
+                .mmapFlags_ = MAP_SHARED,
                 .unlinkPolicy_ = shared_memory::unlink_policy::on_detach
             },
             {
@@ -35,7 +35,7 @@ int main
             {
                 .path_ = sharedMemory.path(),
                 .ioMode_ = io_mode::read,
-                .mapFlags_ = MAP_SHARED,
+                .mmapFlags_ = MAP_SHARED,
                 .unlinkPolicy_ = shared_memory::unlink_policy::on_attach
             },
             {

@@ -3,9 +3,10 @@
 #include <include/file_descriptor.h>
 
 #include <utility>
-#include <sys/mman.h>
 #include <chrono>
-#include <format>
+#include <string>
+
+#include <sys/mman.h>
 
 
 //=============================================================================
@@ -46,7 +47,8 @@ bcpp::system::shared_memory::shared_memory
         if (path_.empty())
         {
             // random path
-            path_ = std::format("bcpp.{}", std::chrono::system_clock::now().time_since_epoch().count());
+            path_ = "bcpp.";
+            path_ += std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
         }
         auto prevUMask = ::umask(0);
         std::int32_t prot = 0;
@@ -65,7 +67,7 @@ bcpp::system::shared_memory::shared_memory
         {
             if (auto ret = ::ftruncate(fileDescriptor.get(), config.size_); ret == 0)
             {
-                if (auto allocation = ::mmap(nullptr, config.size_, prot, config.mapFlags_, fileDescriptor.get(), 0ull); allocation != MAP_FAILED)
+                if (auto allocation = ::mmap(nullptr, config.size_, prot, config.mmapFlags_, fileDescriptor.get(), 0ull); allocation != MAP_FAILED)
                     allocation_ = {reinterpret_cast<std::byte *>(allocation), config.size_};
                 if ((unlinkPolicy_ == unlink_policy::on_attach) || (allocation_.data() == nullptr))
                     unlink();
@@ -104,7 +106,7 @@ bcpp::system::shared_memory::shared_memory
         {
             struct stat fileStat;
             ::fstat(fileDescriptor.get(), &fileStat);
-            if (auto allocation = ::mmap(nullptr, fileStat.st_size, prot, config.mapFlags_, fileDescriptor.get(), 0ull); allocation != MAP_FAILED)
+            if (auto allocation = ::mmap(nullptr, fileStat.st_size, prot, config.mmapFlags_, fileDescriptor.get(), 0ull); allocation != MAP_FAILED)
                     allocation_ = {reinterpret_cast<std::byte *>(allocation), (unsigned)fileStat.st_size};
             if ((unlinkPolicy_ == unlink_policy::on_attach) || (allocation_.data() == nullptr))
                 unlink();
