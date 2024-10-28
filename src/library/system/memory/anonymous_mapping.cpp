@@ -14,7 +14,14 @@ bcpp::system::anonymous_mapping::anonymous_mapping
                 .mmapFlags_ = config.mmapFlags_ | MAP_PRIVATE | MAP_ANONYMOUS
             },
             memory_mapping::event_handlers{
-                .closeHandler_ = [closeHandler = eventHandlers.closeHandler_](auto const & memoryMapping){closeHandler(reinterpret_cast<anonymous_mapping const &>(memoryMapping));}
+                .closeHandler_ = [closeHandler = eventHandlers.closeHandler_]
+                        (
+                            auto const & memoryMapping
+                        ) mutable
+                        {
+                            if (auto handler = std::exchange(closeHandler, nullptr); handler != nullptr)
+                                handler(reinterpret_cast<anonymous_mapping const &>(memoryMapping));
+                        }
             },
             {})
 {
