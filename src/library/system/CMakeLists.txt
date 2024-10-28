@@ -9,6 +9,7 @@ add_library(system
 
 target_link_libraries(system 
     pthread
+    rt
 )
 
 
