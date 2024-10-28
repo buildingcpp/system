@@ -20,8 +20,7 @@ int main
             {
                 .path_ = "",
                 .size_ = 1024,
-                .ioMode_ = io_mode::read_write,
-                .mmapFlags_ = MAP_SHARED,
+                .ioMode_ = io_mode::write,
                 .unlinkPolicy_ = shared_memory::unlink_policy::on_detach
             },
             {
@@ -35,7 +34,6 @@ int main
             {
                 .path_ = sharedMemory.path(),
                 .ioMode_ = io_mode::read,
-                .mmapFlags_ = MAP_SHARED,
                 .unlinkPolicy_ = shared_memory::unlink_policy::on_attach
             },
             {
@@ -43,7 +41,7 @@ int main
                 .unlinkHandler_ = [](auto const &){std::cout << "joiner unlinked\n";}
             });
 
-    auto flag = sharedMemory.as<bool volatile>();
+    auto & flag = sharedMemory.as<bool volatile>();
     flag = false;
     std::jthread t([&](){while (flag == false); std::cout << "Got message\n";});
 
@@ -51,6 +49,5 @@ int main
     std::cout << "sending message\n";
     flag = true;
 
-    std::this_thread::sleep_for(std::chrono::seconds(3));
     return 0;
 }

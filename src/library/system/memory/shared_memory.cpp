@@ -51,14 +51,13 @@ bcpp::system::shared_memory::shared_memory
             path_ += std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
         }
         auto prevUMask = ::umask(0);
-        std::int32_t prot = 0;
         std::int32_t flags = 0;
         switch (config.ioMode_)
         {
-            case io_mode::none: prot = PROT_NONE; flags = O_CREAT; break;
-            case io_mode::read: prot = PROT_READ; flags = O_CREAT | O_RDONLY; break;
-            case io_mode::write: prot = PROT_WRITE; flags = O_CREAT | O_RDWR; break;
-            case io_mode::read_write: prot = PROT_READ | PROT_WRITE; flags = O_CREAT | O_RDWR; break;
+            case io_mode::none: flags = O_CREAT; break;
+            case io_mode::read: flags = O_CREAT | O_RDONLY; break;
+            case io_mode::write: flags = O_CREAT | O_RDWR; break;
+            case io_mode::read_write: flags = O_CREAT | O_RDWR; break;
         }
 
         file_descriptor fileDescriptor({::shm_open(path_.c_str(), flags | O_EXCL, 0666)});
@@ -67,9 +66,15 @@ bcpp::system::shared_memory::shared_memory
         {
             if (auto ret = ::ftruncate(fileDescriptor.get(), config.size_); ret == 0)
             {
-                if (auto allocation = ::mmap(nullptr, config.size_, prot, config.mmapFlags_, fileDescriptor.get(), 0ull); allocation != MAP_FAILED)
-                    allocation_ = {reinterpret_cast<std::byte *>(allocation), config.size_};
-                if ((unlinkPolicy_ == unlink_policy::on_attach) || (allocation_.data() == nullptr))
+                memoryMapping_ = std::move(memory_mapping(
+                        {
+                            .size_ = config.size_,
+                            .ioMode_ = config.ioMode_,
+                            .mmapFlags_ = config.mmapFlags_ | MAP_SHARED
+                        },
+                        {
+                        }, fileDescriptor));
+                if ((unlinkPolicy_ == unlink_policy::on_attach) || (memoryMapping_.data() == nullptr))
                     unlink();
             }
         }
@@ -91,14 +96,13 @@ bcpp::system::shared_memory::shared_memory
     if (!path_.empty())
     {
         auto prevUMask = ::umask(0);
-        std::int32_t prot = 0;
         std::int32_t flags = 0;
         switch (config.ioMode_)
         {
-            case io_mode::none: prot = PROT_NONE; flags = 0; break;
-            case io_mode::read: prot = PROT_READ; flags = O_RDONLY; break;
-            case io_mode::write: prot = PROT_WRITE; flags = O_RDWR; break;
-            case io_mode::read_write: prot = PROT_READ | PROT_WRITE; flags = O_RDWR; break;
+            case io_mode::none: flags = 0; break;
+            case io_mode::read: flags = O_RDONLY; break;
+            case io_mode::write: flags = O_RDWR; break;
+            case io_mode::read_write: flags = O_RDWR; break;
         }
         file_descriptor fileDescriptor({::shm_open(path_.c_str(), flags, 0666)});
         ::umask(prevUMask);
@@ -106,9 +110,15 @@ bcpp::system::shared_memory::shared_memory
         {
             struct stat fileStat;
             ::fstat(fileDescriptor.get(), &fileStat);
-            if (auto allocation = ::mmap(nullptr, fileStat.st_size, prot, config.mmapFlags_, fileDescriptor.get(), 0ull); allocation != MAP_FAILED)
-                    allocation_ = {reinterpret_cast<std::byte *>(allocation), (unsigned)fileStat.st_size};
-            if ((unlinkPolicy_ == unlink_policy::on_attach) || (allocation_.data() == nullptr))
+            memoryMapping_ = std::move(memory_mapping(
+                    {
+                        .size_ = (unsigned)fileStat.st_size,
+                        .ioMode_ = config.ioMode_,
+                        .mmapFlags_ = config.mmapFlags_ | MAP_SHARED
+                    },
+                    {
+                    }, fileDescriptor));
+            if ((unlinkPolicy_ == unlink_policy::on_attach) || (memoryMapping_.data() == nullptr))
                 unlink();
         }
     }
@@ -122,13 +132,14 @@ bcpp::system::shared_memory::shared_memory
 ):
     closeHandler_(other.closeHandler_),
     unlinkHandler_(other.unlinkHandler_),
-    allocation_(other.allocation_),
     unlinkPolicy_(other.unlinkPolicy_),
-    path_(other.path_)
+    path_(other.path_),
+    memoryMapping_(std::move(other.memoryMapping_))
 {
     other.closeHandler_ = nullptr;
     other.unlinkHandler_ = nullptr;
-    other.allocation_ = {};
+    other.path_ = {};
+    other.memoryMapping_ = {};
     other.path_ = {};
 }
 
@@ -144,13 +155,13 @@ auto bcpp::system::shared_memory::operator =
         close();
         closeHandler_ = other.closeHandler_;
         unlinkHandler_ = other.unlinkHandler_;
-        allocation_ = other.allocation_;
         unlinkPolicy_ = other.unlinkPolicy_;
+        memoryMapping_ = std::move(other.memoryMapping_);
         path_ = other.path_;
         other.closeHandler_ = nullptr;
         other.unlinkHandler_ = nullptr;
-        other.allocation_ = {};
         other.path_ = {};
+        other.memoryMapping_ = {};
     }
     return *this;
 }
@@ -172,7 +183,9 @@ void bcpp::system::shared_memory::close
 {
     if (auto closeHandler = std::exchange(closeHandler_, nullptr); closeHandler)
         closeHandler(*this);
-    detach();
+    if (unlinkPolicy_ == unlink_policy::on_detach)
+        unlink();
+    memoryMapping_ = {};
 }
 
 
@@ -192,19 +205,6 @@ void bcpp::system::shared_memory::unlink
 
 
 //=============================================================================
-void bcpp::system::shared_memory::detach
-(
-)
-{
-    if (unlinkPolicy_ == unlink_policy::on_detach)
-        unlink();
-    if (allocation_.data() != nullptr)
-        ::munmap(allocation_.data(), allocation_.size());
-    allocation_ = {};
-}
-
-
-//=============================================================================
 std::string bcpp::system::shared_memory::path
 (
 ) const
@@ -218,7 +218,7 @@ std::byte * bcpp::system::shared_memory::data
 (
 )
 {
-    return allocation_.data();
+    return memoryMapping_.data();
 }
 
 
@@ -227,7 +227,7 @@ std::byte const * bcpp::system::shared_memory::data
 (
 ) const
 {
-    return allocation_.data();
+    return memoryMapping_.data();
 }
 
 
@@ -236,7 +236,7 @@ std::size_t bcpp::system::shared_memory::size
 (
 ) const
 {
-    return allocation_.size();
+    return memoryMapping_.size();
 }
 
 
@@ -245,7 +245,7 @@ bool bcpp::system::shared_memory::is_valid
 (
 ) const
 {
-    return (allocation_.data() != nullptr);
+    return (memoryMapping_.data() != nullptr);
 }
 
 
@@ -254,7 +254,7 @@ std::byte * bcpp::system::shared_memory::begin
 (
 )
 {
-    return allocation_.data();
+    return memoryMapping_.data();
 }
 
 
@@ -263,7 +263,7 @@ std::byte const * bcpp::system::shared_memory::begin
 (
 ) const
 {
-    return allocation_.data();
+    return memoryMapping_.data();
 }
 
 
@@ -272,7 +272,7 @@ std::byte * bcpp::system::shared_memory::end
 (
 )
 {
-    return (allocation_.data() + allocation_.size());
+    return (memoryMapping_.data() + memoryMapping_.size());
 }
 
 
@@ -281,5 +281,5 @@ std::byte const * bcpp::system::shared_memory::end
 (
 ) const
 {
-    return (allocation_.data() + allocation_.size());
+    return (memoryMapping_.data() + memoryMapping_.size());
 }

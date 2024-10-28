@@ -1,5 +1,7 @@
 #pragma once
 
+#include "./memory_mapping.h"
+
 #include <include/io_mode.h>
 #include <include/non_copyable.h>
 
@@ -37,7 +39,7 @@ namespace bcpp::system
             std::string     path_;
             std::size_t     size_;
             io_mode         ioMode_;
-            std::size_t     mmapFlags_ = {MAP_SHARED};
+            std::size_t     mmapFlags_{MAP_SHARED};
             unlink_policy   unlinkPolicy_{default_unlink_policy};
         };
 
@@ -45,7 +47,7 @@ namespace bcpp::system
         {
             std::string     path_;
             io_mode         ioMode_;
-            std::size_t     mmapFlags_ = {MAP_SHARED};
+            std::size_t     mmapFlags_{MAP_SHARED};
             unlink_policy   unlinkPolicy_{default_unlink_policy};
         };
 
@@ -120,11 +122,11 @@ namespace bcpp::system
 
         unlink_handler          unlinkHandler_;
 
-        std::span<std::byte>    allocation_; 
-
         unlink_policy           unlinkPolicy_{default_unlink_policy};
 
         std::string             path_;
+
+        memory_mapping          memoryMapping_;
 
     }; // class shared_memory
 

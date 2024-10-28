@@ -2,7 +2,9 @@
 add_library(system
     ./threading/thread_pool.cpp
     ./system.cpp
-    ./shared_memory/shared_memory.cpp
+    ./memory/shared_memory.cpp
+    ./memory/memory_mapping.cpp
+    ./memory/anonymous_mapping.cpp
 )
 
 target_link_libraries(system 
