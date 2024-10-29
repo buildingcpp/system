@@ -6,7 +6,7 @@
 namespace bcpp::system
 {
 
-    class anonymous_mapping :
+    class anonymous_mapping final :
         public memory_mapping,
         virtual non_copyable
     {
@@ -18,6 +18,7 @@ namespace bcpp::system
         {
             std::size_t     size_;
             std::size_t     mmapFlags_ = {MAP_PRIVATE | MAP_ANONYMOUS};
+            std::size_t     alignment_{1024};
         };
 
         struct event_handlers

@@ -11,7 +11,8 @@ bcpp::system::anonymous_mapping::anonymous_mapping
             memory_mapping::configuration{
                 .size_ = config.size_,
                 .ioMode_ = io_mode::read_write,
-                .mmapFlags_ = config.mmapFlags_ | MAP_PRIVATE | MAP_ANONYMOUS
+                .mmapFlags_ = config.mmapFlags_ | MAP_PRIVATE | MAP_ANONYMOUS,
+                .alignment_ = config.alignment_
             },
             memory_mapping::event_handlers{
                 .closeHandler_ = [closeHandler = eventHandlers.closeHandler_]

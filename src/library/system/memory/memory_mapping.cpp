@@ -1,6 +1,7 @@
 #include "./memory_mapping.h"
 
 #include <include/file_descriptor.h>
+#include <include/bit.h>
 
 #include <utility>
 #include <chrono>
@@ -20,6 +21,8 @@ bcpp::system::memory_mapping::memory_mapping
 {
     if (config.size_)
     {
+        auto alignment = config.alignment_ ? minimum_power_of_two(config.alignment_) : 0;
+        auto allocationSize = config.size_ + alignment;
         std::int32_t prot = 0;
         switch (config.ioMode_)
         {
@@ -28,8 +31,14 @@ bcpp::system::memory_mapping::memory_mapping
             case io_mode::write: prot = PROT_WRITE; break;
             case io_mode::read_write: prot = PROT_READ | PROT_WRITE; break;
         }
-        if (auto allocation = ::mmap(nullptr, config.size_, prot, config.mmapFlags_, fileDescriptor.get(), 0ull); allocation != MAP_FAILED)
-            allocation_ = {reinterpret_cast<std::byte *>(allocation), config.size_};
+        if (auto unalignedAddress = ::mmap(nullptr, allocationSize, prot, config.mmapFlags_, fileDescriptor.get(), 0ull); unalignedAddress != MAP_FAILED)
+        {
+            unalignedAllocation_ = {reinterpret_cast<std::byte *>(unalignedAddress), allocationSize};
+            auto alignedAddress = unalignedAllocation_.data();
+            if (alignment != 0)
+                alignedAddress = reinterpret_cast<std::byte *>((reinterpret_cast<std::size_t>(unalignedAddress) + alignment - 1) & ~(alignment - 1));
+            alignedAllocation_ = {alignedAddress, config.size_};
+        }
     }
 }
 
@@ -40,10 +49,12 @@ bcpp::system::memory_mapping::memory_mapping
     memory_mapping && other
 ):
     closeHandler_(other.closeHandler_),
-    allocation_(other.allocation_)
+    alignedAllocation_(other.alignedAllocation_),
+    unalignedAllocation_(other.unalignedAllocation_)
 {
     other.closeHandler_ = nullptr;
-    other.allocation_ = {};
+    other.alignedAllocation_ = {};
+    other.unalignedAllocation_ = {};
 }
 
 
@@ -57,9 +68,11 @@ auto bcpp::system::memory_mapping::operator =
     {
         close();
         closeHandler_ = other.closeHandler_;
-        allocation_ = other.allocation_;
+        alignedAllocation_ = other.alignedAllocation_;
+        unalignedAllocation_ = other.unalignedAllocation_;
         other.closeHandler_ = nullptr;
-        other.allocation_ = {};
+        other.alignedAllocation_ = {};
+        other.unalignedAllocation_ = {};
     }
     return *this;
 }
@@ -81,9 +94,10 @@ void bcpp::system::memory_mapping::close
 {
     if (auto closeHandler = std::exchange(closeHandler_, nullptr); closeHandler)
         closeHandler(*this);
-    if (allocation_.data() != nullptr)
-        ::munmap(allocation_.data(), allocation_.size());
-    allocation_ = {};
+    if (unalignedAllocation_.data() != nullptr)
+        ::munmap(unalignedAllocation_.data(), unalignedAllocation_.size());
+    unalignedAllocation_ = {};
+    alignedAllocation_ = {};
 }
 
 
@@ -92,7 +106,7 @@ std::byte * bcpp::system::memory_mapping::data
 (
 )
 {
-    return allocation_.data();
+    return alignedAllocation_.data();
 }
 
 
@@ -101,7 +115,7 @@ std::byte const * bcpp::system::memory_mapping::data
 (
 ) const
 {
-    return allocation_.data();
+    return alignedAllocation_.data();
 }
 
 
@@ -110,7 +124,7 @@ std::size_t bcpp::system::memory_mapping::size
 (
 ) const
 {
-    return allocation_.size();
+    return alignedAllocation_.size();
 }
 
 
@@ -119,7 +133,7 @@ bool bcpp::system::memory_mapping::is_valid
 (
 ) const
 {
-    return (allocation_.data() != nullptr);
+    return (alignedAllocation_.data() != nullptr);
 }
 
 
@@ -128,7 +142,7 @@ std::byte * bcpp::system::memory_mapping::begin
 (
 )
 {
-    return allocation_.data();
+    return alignedAllocation_.data();
 }
 
 
@@ -137,7 +151,7 @@ std::byte const * bcpp::system::memory_mapping::begin
 (
 ) const
 {
-    return allocation_.data();
+    return alignedAllocation_.data();
 }
 
 
@@ -146,7 +160,7 @@ std::byte * bcpp::system::memory_mapping::end
 (
 )
 {
-    return (allocation_.data() + allocation_.size());
+    return (alignedAllocation_.data() + alignedAllocation_.size());
 }
 
 
@@ -155,5 +169,5 @@ std::byte const * bcpp::system::memory_mapping::end
 (
 ) const
 {
-    return (allocation_.data() + allocation_.size());
+    return (alignedAllocation_.data() + alignedAllocation_.size());
 }

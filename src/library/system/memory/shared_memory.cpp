@@ -70,7 +70,8 @@ bcpp::system::shared_memory::shared_memory
                         {
                             .size_ = config.size_,
                             .ioMode_ = config.ioMode_,
-                            .mmapFlags_ = config.mmapFlags_ | MAP_SHARED
+                            .mmapFlags_ = config.mmapFlags_ | MAP_SHARED,
+                            .alignment_ = 0
                         },
                         {
                         }, fileDescriptor));
@@ -114,7 +115,8 @@ bcpp::system::shared_memory::shared_memory
                     {
                         .size_ = (unsigned)fileStat.st_size,
                         .ioMode_ = config.ioMode_,
-                        .mmapFlags_ = config.mmapFlags_ | MAP_SHARED
+                        .mmapFlags_ = config.mmapFlags_ | MAP_SHARED,
+                        .alignment_ = 0
                     },
                     {
                     }, fileDescriptor));

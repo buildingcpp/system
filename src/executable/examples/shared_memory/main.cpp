@@ -33,7 +33,7 @@ int main
     auto joinMemory = shared_memory::join(
             {
                 .path_ = sharedMemory.path(),
-                .ioMode_ = io_mode::read,
+                .ioMode_ = io_mode::write,
                 .unlinkPolicy_ = shared_memory::unlink_policy::on_attach
             },
             {
@@ -41,13 +41,16 @@ int main
                 .unlinkHandler_ = [](auto const &){std::cout << "joiner unlinked\n";}
             });
 
-    auto & flag = sharedMemory.as<bool volatile>();
-    flag = false;
-    std::jthread t([&](){while (flag == false); std::cout << "Got message\n";});
+    auto & flagWrite = sharedMemory.as<bool volatile>();
+    flagWrite = false;
+    auto & flagRead = joinMemory.as<bool volatile>();
+    flagRead = false;
+
+    std::jthread t([&](){while (flagRead == false); std::cout << "Got message\n";});
 
     std::this_thread::sleep_for(std::chrono::seconds(3));
     std::cout << "sending message\n";
-    flag = true;
+    flagWrite = true;
 
     return 0;
 }

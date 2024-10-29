@@ -29,6 +29,7 @@ namespace bcpp::system
             std::size_t     size_;
             io_mode         ioMode_{PROT_READ | PROT_WRITE};
             std::size_t     mmapFlags_;
+            std::size_t     alignment_{1024};
         };
 
         struct event_handlers
@@ -76,7 +77,9 @@ namespace bcpp::system
 
         close_handler           closeHandler_;
 
-        std::span<std::byte>    allocation_; 
+        std::span<std::byte>    alignedAllocation_;
+
+        std::span<std::byte>    unalignedAllocation_;
 
     }; // class memory_mapping
 
