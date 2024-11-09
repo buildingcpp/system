@@ -35,8 +35,7 @@ namespace bcpp::system
         anonymous_mapping() = default;
         anonymous_mapping(anonymous_mapping &&) = default;
         anonymous_mapping & operator = (anonymous_mapping &&) = default;
-        ~anonymous_mapping() = default;
-
+        virtual ~anonymous_mapping() = default;
     }; // class anonymous_mapping
 
 } // namespace bcpp::system
