@@ -31,7 +31,7 @@ bcpp::system::memory_mapping::memory_mapping
             case io_mode::write: prot = PROT_WRITE; break;
             case io_mode::read_write: prot = PROT_READ | PROT_WRITE; break;
         }
-        if (auto unalignedAddress = ::mmap(nullptr, allocationSize, prot, config.mmapFlags_, fileDescriptor.get(), 0ull); unalignedAddress != MAP_FAILED)
+        if (auto unalignedAddress = ::mmap(nullptr, allocationSize, prot, config.mmapFlags_, bcpp::to_underlying_fundamental(fileDescriptor), 0ull); unalignedAddress != MAP_FAILED)
         {
             unalignedAllocation_ = {reinterpret_cast<std::byte *>(unalignedAddress), allocationSize};
             auto alignedAddress = unalignedAllocation_.data();

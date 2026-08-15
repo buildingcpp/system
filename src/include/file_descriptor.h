@@ -1,6 +1,7 @@
 #pragma once
 
 #include <include/non_copyable.h>
+#include <include/underlying.h>
 
 #include <cstdint>
 #include <utility>
@@ -40,7 +41,7 @@ namespace bcpp::system
 
         bool close();
 
-        value_type get() const;
+        explicit operator value_type() const;
 
         bool is_valid() const;
 
@@ -52,6 +53,18 @@ namespace bcpp::system
 } // namespace bcpp::system
 
 
+namespace bcpp
+{
+
+    template <>
+    struct underlying_type<system::file_descriptor>
+    {
+        using type = system::file_descriptor::value_type;
+    };
+
+} // namespace bcpp
+
+
 //=============================================================================
 [[maybe_unused]]
 static std::ostream & operator << 
@@ -60,7 +73,7 @@ static std::ostream & operator <<
     bcpp::system::file_descriptor const & fileDescriptor
 )
 {
-    stream << fileDescriptor.get();
+    stream << bcpp::to_underlying_fundamental(fileDescriptor);
     return stream;
 }
 
@@ -125,9 +138,9 @@ inline bool bcpp::system::file_descriptor::close
 
 
 //=============================================================================
-inline auto bcpp::system::file_descriptor::get
+inline bcpp::system::file_descriptor::operator value_type
 (
-) const -> value_type
+) const
 {
     return value_;
 }

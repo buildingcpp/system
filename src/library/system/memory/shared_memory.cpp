@@ -64,7 +64,7 @@ bcpp::system::shared_memory::shared_memory
         ::umask(prevUMask);
         if (fileDescriptor.is_valid())
         {
-            if (auto ret = ::ftruncate(fileDescriptor.get(), config.size_); ret == 0)
+            if (auto ret = ::ftruncate(bcpp::to_underlying_fundamental(fileDescriptor), config.size_); ret == 0)
             {
                 memoryMapping_ = std::move(memory_mapping(
                         {
@@ -110,7 +110,7 @@ bcpp::system::shared_memory::shared_memory
         if (fileDescriptor.is_valid())
         {
             struct stat fileStat;
-            ::fstat(fileDescriptor.get(), &fileStat);
+            ::fstat(bcpp::to_underlying_fundamental(fileDescriptor), &fileStat);
             memoryMapping_ = std::move(memory_mapping(
                     {
                         .size_ = (unsigned)fileStat.st_size,
