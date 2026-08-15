@@ -8,6 +8,7 @@ add_library(system
 )
 
 target_link_libraries(system 
+PUBLIC
     pthread
     rt
 )

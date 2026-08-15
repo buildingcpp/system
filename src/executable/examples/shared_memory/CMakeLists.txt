@@ -6,6 +6,8 @@ PRIVATE
 
 
 target_link_libraries(shared_memory 
-PRIVATE
+PUBLIC
+    pthread
+    rt
     system
 )
