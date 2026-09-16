@@ -50,6 +50,16 @@ namespace bcpp::system
         value_type   value_{0};
     };
 
+
+    //=========================================================================
+    inline auto to_underlying
+    (
+        file_descriptor const & fileDescriptor
+    ) -> file_descriptor::value_type
+    {
+        return static_cast<file_descriptor::value_type>(fileDescriptor);
+    }
+
 } // namespace bcpp::system
 
 

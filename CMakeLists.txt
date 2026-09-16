@@ -3,6 +3,10 @@ set(CMAKE_CXX_STANDARD 20)
 
 project(system)
 
+if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+    include(CTest)
+endif()
+
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
     message("*** Build type not set.  defaulting to Release")

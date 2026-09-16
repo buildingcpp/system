@@ -1,0 +1,3 @@
+add_executable(file_descriptor_test file_descriptor_test.cpp)
+target_link_libraries(file_descriptor_test PRIVATE system)
+add_test(NAME file_descriptor_test COMMAND file_descriptor_test)
